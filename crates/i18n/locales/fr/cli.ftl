@@ -1,0 +1,24 @@
+# La ligne de commande nodo.
+cli.usage = nodo — les cartes réseau de Nodo depuis le terminal (lecture seule sauf --save)\n\nUsage :\n  nodo list [--map FICHIER] [--json]          appareils d'une carte\n  nodo show <appareil> [--map FICHIER] [--json] un appareil (id, nom, IP, MAC ou nom d'hôte) avec son historique\n  nodo scan [--passive] [--tailscale] [--wireguard] [--aws PROFIL [--region R]…] [--json] [--save] [--map FICHIER]\n                                              découvrir maintenant (passif par défaut : table des voisins, mDNS, SSDP) ; --save l'enregistre dans la carte\n  nodo export <svg|pdf|mermaid|csv|json> [--layout radial|subnet|network] [-o FICHIER] [--map FICHIER]\n                                              exporte le graphe ou l'inventaire\n  nodo maps                                   cartes ouvertes récemment\n\nSans --map, la dernière carte ouverte est utilisée.
+cli.err.needs_value = {flag} attend une valeur
+cli.err.no_map = Aucune carte indiquée et aucune récente. Utilisez --map FICHIER ou ouvrez-en une dans l'app Nodo.
+cli.err.no_device = Aucun appareil ne correspond à « {query} ».
+cli.err.ambiguous = « {query} » correspond à {n} appareils ; utilisez son id, son IP ou sa MAC.
+cli.err.show_needs = Quel appareil ? nodo show <id | nom | IP | MAC>
+cli.err.unknown = Commande inconnue « {command} ». Lancez nodo --help.
+cli.list.header = {map} — {n} appareils
+cli.col.name = NOM
+cli.col.type = TYPE
+cli.col.seen = VU
+cli.col.vendor = fabricant
+cli.col.hostname = nom d'hôte
+cli.col.os = OS
+cli.col.model = modèle
+cli.col.owner = responsable
+cli.col.location = emplacement
+cli.col.tags = étiquettes
+cli.col.service = service
+cli.col.notes = notes
+cli.scan.passive = Écoute pendant quelques secondes (table des voisins, mDNS, SSDP)…
+cli.scan.saved = Enregistré dans {map} : {new} nouveaux, {updated} mis à jour.
+cli.err.format = Format d'export inconnu « {format} » : utilisez svg, pdf, mermaid, csv ou json.

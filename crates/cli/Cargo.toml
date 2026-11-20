@@ -1,0 +1,17 @@
+[package]
+name = "nodo-cli"
+description = "nodo: headless command line for Nodo network maps (list, scan, show)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nodo"
+path = "src/main.rs"
+
+[dependencies]
+nodo-core.workspace = true
+i18n.workspace = true
+serde_json.workspace = true

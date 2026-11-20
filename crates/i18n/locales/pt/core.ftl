@@ -1,0 +1,27 @@
+# Mensagens do nodo-core (avisos de descoberta, erros do arquivo de mapa, rótulos de exportação).
+core.tailscale.not_found = CLI do Tailscale não encontrada. Instale o Tailscale (no macOS o app já a inclui) e tente de novo.
+core.tailscale.bad_output = Não foi possível ler o status do Tailscale: {detail}
+core.tailscale.failed = O Tailscale não respondeu: {detail}
+core.aws.not_found = CLI da AWS não encontrada. Instale-a (aws) e configure um perfil com `aws configure sso`.
+core.aws.sso_expired = A sessão SSO de "{profile}" expirou. Rode `aws sso login --profile {profile}` num terminal e tente de novo.
+core.aws.no_credentials = Sem credenciais para o perfil "{profile}". Configure-o com `aws configure sso --profile {profile}`.
+core.aws.denied = Acesso negado (o Nodo só precisa de permissões ec2:Describe*): {detail}
+core.aws.failed = Erro da CLI da AWS: {detail}
+core.wg.not_found = Ferramentas do WireGuard (wg) não encontradas.
+core.wg.needs_root = Ler o WireGuard exige permissões de administrador. Num terminal rode: {command} — e depois importe esse arquivo (Dump do WireGuard…).
+core.wg.failed = wg falhou: {detail}
+core.arp.failed = Não foi possível ler a tabela de vizinhos: {detail}
+core.mdns.failed = A busca mDNS falhou: {detail}
+core.ssdp.failed = A busca SSDP falhou: {detail}
+core.db.not_database = Este arquivo não é um mapa do Nodo (não é um banco de dados).
+core.db.error = Erro no arquivo de mapa: {detail}
+core.db.not_nodo = Este banco de dados não é um mapa do Nodo.
+core.db.too_new = Este mapa foi criado por uma versão mais nova do Nodo (formato {version}). Atualize o Nodo para abri-lo.
+core.db.corrupt = O arquivo de mapa está danificado: {detail}
+core.import.empty = O arquivo está vazio.
+core.import.no_columns = Nenhuma coluna de nome, IP ou MAC na linha de cabeçalho.
+core.graph.root = Esta rede
+core.layer.lan = LAN
+core.layer.tailscale = Tailscale
+core.layer.aws = AWS
+core.layer.wireguard = WireGuard

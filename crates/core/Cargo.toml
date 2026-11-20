@@ -1,0 +1,27 @@
+[package]
+name = "nodo-core"
+description = "Nodo's engine: network map storage, discovery parsers, identity merge, layout, monitoring and export. No UI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "nodo_core"
+
+[dependencies]
+i18n.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite = { version = "0.37", features = ["bundled"] }
+flate2 = "1"
+mdns-sd = "0.22"
+# SSDP device descriptions on the LAN (plain http to private addresses only)
+ureq = { version = "3", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

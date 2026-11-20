@@ -1,0 +1,27 @@
+# Messages from nodo-core (discovery notes, map file errors, export labels).
+core.tailscale.not_found = Tailscale CLI not found. Install Tailscale (on macOS the app includes it) and try again.
+core.tailscale.bad_output = Could not read Tailscale's status: {detail}
+core.tailscale.failed = Tailscale did not answer: {detail}
+core.aws.not_found = AWS CLI not found. Install it (aws) and set up a profile with `aws configure sso`.
+core.aws.sso_expired = The SSO session for "{profile}" has expired. Run `aws sso login --profile {profile}` in a terminal, then try again.
+core.aws.no_credentials = No credentials for profile "{profile}". Set it up with `aws configure sso --profile {profile}`.
+core.aws.denied = Access denied (Nodo only needs ec2:Describe* permissions): {detail}
+core.aws.failed = AWS CLI error: {detail}
+core.wg.not_found = WireGuard tools (wg) not found.
+core.wg.needs_root = Reading WireGuard needs administrator rights. In a terminal run: {command} — then import that file (WireGuard dump…).
+core.wg.failed = wg failed: {detail}
+core.arp.failed = Could not read the neighbour table: {detail}
+core.mdns.failed = mDNS browse failed: {detail}
+core.ssdp.failed = SSDP search failed: {detail}
+core.db.not_database = This file is not a Nodo map (not a database).
+core.db.error = Map file error: {detail}
+core.db.not_nodo = This database is not a Nodo map.
+core.db.too_new = This map was made by a newer version of Nodo (format {version}). Update Nodo to open it.
+core.db.corrupt = The map file is damaged: {detail}
+core.import.empty = The file is empty.
+core.import.no_columns = No name, IP or MAC column found in the header row.
+core.graph.root = This network
+core.layer.lan = LAN
+core.layer.tailscale = Tailscale
+core.layer.aws = AWS
+core.layer.wireguard = WireGuard

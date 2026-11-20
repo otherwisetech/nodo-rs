@@ -1,0 +1,27 @@
+# Messages de nodo-core (notes de découverte, erreurs du fichier de carte, libellés d'export).
+core.tailscale.not_found = CLI Tailscale introuvable. Installez Tailscale (sur macOS l'app l'inclut) puis réessayez.
+core.tailscale.bad_output = Impossible de lire l'état de Tailscale : {detail}
+core.tailscale.failed = Tailscale n'a pas répondu : {detail}
+core.aws.not_found = CLI AWS introuvable. Installez-la (aws) et configurez un profil avec `aws configure sso`.
+core.aws.sso_expired = La session SSO de « {profile} » a expiré. Lancez `aws sso login --profile {profile}` dans un terminal, puis réessayez.
+core.aws.no_credentials = Aucun identifiant pour le profil « {profile} ». Configurez-le avec `aws configure sso --profile {profile}`.
+core.aws.denied = Accès refusé (Nodo n'a besoin que des droits ec2:Describe*) : {detail}
+core.aws.failed = Erreur de la CLI AWS : {detail}
+core.wg.not_found = Outils WireGuard (wg) introuvables.
+core.wg.needs_root = Lire WireGuard demande les droits administrateur. Dans un terminal, lancez : {command} — puis importez ce fichier (Dump WireGuard…).
+core.wg.failed = wg a échoué : {detail}
+core.arp.failed = Impossible de lire la table des voisins : {detail}
+core.mdns.failed = La recherche mDNS a échoué : {detail}
+core.ssdp.failed = La recherche SSDP a échoué : {detail}
+core.db.not_database = Ce fichier n'est pas une carte Nodo (ce n'est pas une base de données).
+core.db.error = Erreur du fichier de carte : {detail}
+core.db.not_nodo = Cette base de données n'est pas une carte Nodo.
+core.db.too_new = Cette carte vient d'une version plus récente de Nodo (format {version}). Mettez Nodo à jour pour l'ouvrir.
+core.db.corrupt = Le fichier de carte est endommagé : {detail}
+core.import.empty = Le fichier est vide.
+core.import.no_columns = Aucune colonne nom, IP ou MAC dans la ligne d'en-tête.
+core.graph.root = Ce réseau
+core.layer.lan = LAN
+core.layer.tailscale = Tailscale
+core.layer.aws = AWS
+core.layer.wireguard = WireGuard

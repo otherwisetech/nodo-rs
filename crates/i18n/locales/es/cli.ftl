@@ -1,0 +1,24 @@
+# La línea de comandos nodo.
+cli.usage = nodo — los mapas de red de Nodo desde la terminal (solo lectura salvo --save)\n\nUso:\n  nodo list [--map ARCHIVO] [--json]          dispositivos de un mapa\n  nodo show <dispositivo> [--map ARCHIVO] [--json] un dispositivo (id, nombre, IP, MAC o nombre de host) con su historial\n  nodo scan [--passive] [--tailscale] [--wireguard] [--aws PERFIL [--region R]…] [--json] [--save] [--map ARCHIVO]\n                                              descubrir ahora (pasivo por defecto: tabla de vecinos, mDNS, SSDP); --save lo guarda en el mapa\n  nodo export <svg|pdf|mermaid|csv|json> [--layout radial|subnet|network] [-o ARCHIVO] [--map ARCHIVO]\n                                              exporta el grafo o el inventario\n  nodo maps                                   mapas abiertos recientemente\n\nSin --map se usa el último mapa abierto.
+cli.err.needs_value = {flag} necesita un valor
+cli.err.no_map = No se indicó mapa y no hay ninguno reciente. Usa --map ARCHIVO o abre uno antes en la app Nodo.
+cli.err.no_device = Ningún dispositivo coincide con "{query}".
+cli.err.ambiguous = "{query}" coincide con {n} dispositivos; usa su id, IP o MAC.
+cli.err.show_needs = ¿Qué dispositivo? nodo show <id | nombre | IP | MAC>
+cli.err.unknown = Comando desconocido "{command}". Ejecuta nodo --help.
+cli.list.header = {map} — {n} dispositivos
+cli.col.name = NOMBRE
+cli.col.type = TIPO
+cli.col.seen = VISTO
+cli.col.vendor = fabricante
+cli.col.hostname = nombre de host
+cli.col.os = SO
+cli.col.model = modelo
+cli.col.owner = responsable
+cli.col.location = ubicación
+cli.col.tags = etiquetas
+cli.col.service = servicio
+cli.col.notes = notas
+cli.scan.passive = Escuchando unos segundos (tabla de vecinos, mDNS, SSDP)…
+cli.scan.saved = Guardado en {map}: {new} nuevos, {updated} actualizados.
+cli.err.format = Formato de exportación desconocido "{format}": usa svg, pdf, mermaid, csv o json.
