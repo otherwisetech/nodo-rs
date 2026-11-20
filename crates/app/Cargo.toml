@@ -1,0 +1,34 @@
+[package]
+name = "nodo-app"
+description = "Nodo: map and track the devices on your networks as a living graph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nodo-app"
+path = "src/main.rs"
+
+[dependencies]
+i18n.workspace = true
+nodo-core.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+# GitHub star count (one GET a day)
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+# PNG export of the graph (already in Cargo.lock through gpui)
+resvg = "0.45"
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component.workspace = true
+gpui-component-assets.workspace = true
+
+# build.rs embeds the .exe icon; only pulled in when building on Windows
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2.7"
+libc = "0.2"
