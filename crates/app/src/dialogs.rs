@@ -30,6 +30,7 @@ pub struct SettingsForm {
     pub alert_new: bool,
     pub notify: bool,
     pub auto_refresh: bool,
+    pub today: bool,
     pub stars: bool,
     pub terminal: Option<String>,
     pub term_prefer: crate::terminal::state::Prefer,
@@ -119,7 +120,7 @@ impl NodoApp {
         let term_dock = self.term.layout.dock;
         let share_dir = mk(s.share_dir().display().to_string(), window, cx);
         let share_max = mk((s.share_max_bytes() / (1024 * 1024)).to_string(), window, cx);
-        self.dialog = Some(Dialog::Settings(SettingsForm { interval, down_minutes, alert_down: cfg.alert_down, alert_new: cfg.alert_new, notify: s.notify(), auto_refresh: s.auto_refresh(), stars: s.github_stars(), terminal: s.terminal.clone(), term_prefer, term_dock, term_font, share_receive: s.share_receive(), share_auto: s.share_auto(), share_dir, share_max }));
+        self.dialog = Some(Dialog::Settings(SettingsForm { interval, down_minutes, alert_down: cfg.alert_down, alert_new: cfg.alert_new, notify: s.notify(), auto_refresh: s.auto_refresh(), today: s.today_feed(), stars: s.github_stars(), terminal: s.terminal.clone(), term_prefer, term_dock, term_font, share_receive: s.share_receive(), share_auto: s.share_auto(), share_dir, share_max }));
         cx.notify();
     }
 
@@ -138,6 +139,7 @@ impl NodoApp {
         crate::settings::Settings::update(|s| {
             s.notify = (!f.notify).then(|| "off".into()); // i18n-ok: setting value
             s.auto_refresh = (!f.auto_refresh).then(|| "off".into()); // i18n-ok: setting value
+            s.today_feed = (!f.today).then(|| "off".into()); // i18n-ok: setting value
             s.terminal = f.terminal.clone();
             s.term_prefer = f.term_prefer.id();
             s.term_font = f.term_font.read(cx).value().trim().replace(',', ".").parse::<f32>().ok().map(|v| format!("{}", v.clamp(crate::terminal::FONT_MIN, crate::terminal::FONT_MAX)));
@@ -415,6 +417,9 @@ impl NodoApp {
                     .child(check("set-auto", i18n::t!("app.settings.auto_refresh"), f.auto_refresh, |f, v| f.auto_refresh = v))
                     .child(check("set-stars", i18n::t!("app.star.setting"), f.stars, |f, v| f.stars = v))
                     .child(hint(i18n::t!("app.star.setting_hint")))
+                    .child(ui::section_title(t, i18n::t!("app.settings.otherwise")))
+                    .child(check("set-today", i18n::t!("app.settings.today"), f.today, |f, v| f.today = v))
+                    .child(hint(if otherwise_link::settings::HubSettings::load(&otherwise_link::Root::system()).entities { i18n::t!("app.settings.registry_on") } else { i18n::t!("app.settings.registry_off") }))
                     .child(ui::section_title(t, i18n::t!("app.share.section")))
                     .child(check("set-share", i18n::t!("app.share.receive"), f.share_receive, |f, v| f.share_receive = v))
                     .child(hint(i18n::t!("app.share.receive_hint")))

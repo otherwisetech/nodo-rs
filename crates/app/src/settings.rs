@@ -40,6 +40,10 @@ pub struct Settings {
     pub share_dir: Option<String>,
     /// Largest file accepted, in MB.
     pub share_max_mb: Option<String>,
+    /// `"off"`: don't publish alerts to Otherwise Apps' Today view.
+    pub today_feed: Option<String>,
+    /// The executable `otherwise-nodo://` was last registered for (Windows / Linux).
+    pub link_registered: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,11 +115,13 @@ impl Settings {
             share_auto: st("share_auto"),
             share_dir: st("share_dir"),
             share_max_mb: st("share_max_mb"),
+            today_feed: st("today_feed"),
+            link_registered: st("link_registered"),
         }
     }
 
     fn to_json(&self) -> String {
-        let strings = [("language", &self.language), ("view", &self.view), ("layout", &self.layout), ("terminal", &self.terminal), ("github_stars", &self.github_stars), ("notify", &self.notify), ("auto_refresh", &self.auto_refresh), ("term_dock", &self.term_dock), ("term_bottom", &self.term_bottom), ("term_right", &self.term_right), ("term_collapsed", &self.term_collapsed), ("term_font", &self.term_font), ("term_prefer", &self.term_prefer), ("share_receive", &self.share_receive), ("share_auto", &self.share_auto), ("share_dir", &self.share_dir), ("share_max_mb", &self.share_max_mb)];
+        let strings = [("language", &self.language), ("view", &self.view), ("layout", &self.layout), ("terminal", &self.terminal), ("github_stars", &self.github_stars), ("notify", &self.notify), ("auto_refresh", &self.auto_refresh), ("term_dock", &self.term_dock), ("term_bottom", &self.term_bottom), ("term_right", &self.term_right), ("term_collapsed", &self.term_collapsed), ("term_font", &self.term_font), ("term_prefer", &self.term_prefer), ("share_receive", &self.share_receive), ("share_auto", &self.share_auto), ("share_dir", &self.share_dir), ("share_max_mb", &self.share_max_mb), ("today_feed", &self.today_feed), ("link_registered", &self.link_registered)];
         let lists = [("hidden_layers", &self.hidden_layers), ("launch_ok", &self.launch_ok)];
         let mut fields: Vec<String> = strings.iter().filter_map(|(k, v)| v.as_ref().map(|v| format!("  \"{k}\": {}", quote(v)))).collect();
         fields.extend(lists.iter().filter(|(_, v)| !v.is_empty()).map(|(k, v)| format!("  \"{k}\": [{}]", v.iter().map(|x| quote(x)).collect::<Vec<_>>().join(", "))));
@@ -128,6 +134,10 @@ impl Settings {
 
     pub fn notify(&self) -> bool {
         self.notify.as_deref() != Some("off")
+    }
+
+    pub fn today_feed(&self) -> bool {
+        self.today_feed.as_deref() != Some("off")
     }
 
     pub fn auto_refresh(&self) -> bool {
@@ -315,6 +325,8 @@ mod tests {
             share_auto: Some("on".into()),
             share_dir: Some("/tmp/inbox".into()),
             share_max_mb: Some("10".into()),
+            today_feed: Some("off".into()),
+            link_registered: Some("C:\\Nodo\\nodo-app.exe".into()),
         };
         assert_eq!(Settings::parse(&s.to_json()), s);
         assert!(s.share_receive() && !Settings::default().share_receive(), "receiving is opt-in");
@@ -324,6 +336,7 @@ mod tests {
         assert!(!s.github_stars() && Settings::default().github_stars());
         assert!(!s.notify() && Settings::default().notify());
         assert!(!s.auto_refresh() && Settings::default().auto_refresh());
+        assert!(!s.today_feed() && Settings::default().today_feed());
         assert_eq!(Settings::parse(&Settings::default().to_json()), Settings::default());
         assert_eq!(s.term_font(), 14.);
         assert_eq!(Settings { term_font: Some("200".into()), ..Default::default() }.term_font(), crate::terminal::FONT_MAX);

@@ -479,3 +479,18 @@ app.svc.title = Services
 app.svc.add_for = Monitor a service…
 app.svc.add_title = New service
 app.svc.edit_title = Edit service
+
+# Otherwise Apps: Today view, shared registry, deep links, Vigía
+app.settings.otherwise = Otherwise Apps
+app.settings.today = Show devices and services that need attention in the Today view of Otherwise Apps
+app.settings.registry_on = Saved devices and their places are shared with the other Otherwise apps (turned on in Otherwise Apps).
+app.settings.registry_off = Sharing devices with the other Otherwise apps is off; it can be turned on in Otherwise Apps.
+app.link.not_found = That isn't in this map.
+app.link.unknown = Nodo can't open this link: {url}
+app.link.owner_company = company
+app.link.owner_person = person
+app.link.owner_labeled = {owner} ({kind})
+app.link.warranty_in_vigia = Add warranty in Vigía
+app.link.warranty_name = Warranty {name}
+app.link.track_in_vigia = Track the certificate in Vigía
+app.link.vigia_failed = Couldn't open Vigía: {detail}

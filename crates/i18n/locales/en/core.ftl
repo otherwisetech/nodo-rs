@@ -43,3 +43,14 @@ core.svc.cert_expired = Certificate expired {days} days ago
 core.svc.open = Port {port} open
 core.svc.dns_mismatch = Resolved to {got}
 core.svc.no_reply = No reply
+
+# Otherwise Apps: Today view and shared registry
+core.sync.error = Shared registry: {detail}
+core.today.device_down = {name} is down
+core.today.service_down = {name} is down
+core.today.service_slow = {name} is slow ({ms} ms)
+core.today.cert_expired = The certificate of {host} has expired
+core.today.cert_expiring.one = The certificate of {host} expires tomorrow
+core.today.cert_expiring.other = The certificate of {host} expires in {n} days
+core.today.cert_item = SSL {host}
+core.today.track_in_vigia = Track it in Vigía

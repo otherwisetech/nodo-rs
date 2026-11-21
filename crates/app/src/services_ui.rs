@@ -360,7 +360,7 @@ impl NodoApp {
             .child(div().w(px(70.)).flex_none().child(i18n::t!("app.svc.col_7d")))
             .child(div().w(px(70.)).flex_none().child(i18n::t!("app.svc.col_30d")))
             .child(div().w(px(80.)).flex_none().child(i18n::t!("app.svc.col_cert")))
-            .child(div().w(px(84.)).flex_none());
+            .child(div().w(px(112.)).flex_none());
         let mut list = div().id("svc-list").flex().flex_col().flex_1().min_h_0().overflow_y_scroll();
         let services = self.svc.list.clone();
         for (k, s) in services.iter().enumerate() {
@@ -420,11 +420,12 @@ impl NodoApp {
                     .child(div().w(px(80.)).flex_none().text_size(px(11.5)).when(cert.is_some_and(|(_, warn)| warn), |d| d.text_color(t.danger)).child(cert.map(|(d, _)| i18n::t!("app.svc.days", n = d)).unwrap_or_default()))
                     .child(
                         div()
-                            .w(px(84.))
+                            .w(px(112.))
                             .flex_none()
                             .flex()
                             .gap(px(2.))
                             .child(ui::icon_button(t, ("svc-now", k), IconName::Redo, true).size(px(26.)).on_click(cx.listener(move |this, _, _, cx| this.check_service_now(id, cx))))
+                            .when(nodo_core::links::tls_host(s).is_some(), |row| row.child(ui::icon_button(t, ("svc-vigia", k), IconName::Calendar, true).size(px(26.)).tooltip(|window, cx| gpui_component::tooltip::Tooltip::new(i18n::t!("app.link.track_in_vigia")).build(window, cx)).on_click(cx.listener(move |this, _, _, cx| this.certificate_in_vigia(id, cx)))))
                             .child(ui::icon_button(t, ("svc-edit", k), IconName::Settings, true).size(px(26.)).on_click(cx.listener(move |this, _, window, cx| this.open_service(Some(id), None, None, window, cx))))
                             .child(ui::icon_button(t, ("svc-del", k), IconName::Delete, true).size(px(26.)).on_click(cx.listener(move |this, _, _, cx| this.delete_service(id, cx)))),
                     ),

@@ -139,7 +139,11 @@ impl Terminal {
         let listener = Listener(shared.clone());
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
         let term = Arc::new(FairMutex::new(Term::new(config, &dims, listener.clone())));
+        #[cfg(unix)]
         let child_pid = pty.child().id();
+        // Windows' pty exposes the child only through its exit watcher
+        #[cfg(windows)]
+        let child_pid = pty.child_watcher().pid().map_or(0, |p| p.get());
         let event_loop = EventLoop::new(term.clone(), listener, pty, true, false).context("event loop")?;
         let notifier = Notifier(event_loop.channel());
         let teardown = event_loop.channel();

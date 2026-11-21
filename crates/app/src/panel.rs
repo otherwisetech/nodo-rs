@@ -477,7 +477,11 @@ impl NodoApp {
             info = info.child(div().flex().flex_col().gap(px(2.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(i18n::t!("app.device.services"))).children(svc.into_iter().take(14).map(|s| div().font_family(MONO).text_size(px(11.)).text_color(t.ink_muted).truncate().child(s))));
         }
         // inventory
-        for (k, v) in [(i18n::t!("app.edit.owner"), d.owner.clone()), (i18n::t!("app.edit.location"), d.location.clone()), (i18n::t!("app.edit.tags"), d.tags.join(", ")), (i18n::t!("app.edit.notes"), d.notes.clone())] {
+        let owner = match self.owner_label(&d.owner) {
+            Some(kind) => i18n::t!("app.link.owner_labeled", owner = d.owner, kind = kind),
+            None => d.owner.clone(),
+        };
+        for (k, v) in [(i18n::t!("app.edit.owner"), owner), (i18n::t!("app.edit.location"), d.location.clone()), (i18n::t!("app.edit.tags"), d.tags.join(", ")), (i18n::t!("app.edit.notes"), d.notes.clone())] {
             if !v.is_empty() {
                 info = info.child(kv(k, v));
             }
@@ -513,6 +517,7 @@ impl NodoApp {
                 })
             };
             menu.item(item(i18n::t!("app.action.shell_here"), |this, id, window, cx| this.shell_here(id, window, cx)))
+                .item(item(i18n::t!("app.link.warranty_in_vigia"), |this, id, _, cx| this.warranty_in_vigia(id, cx)))
                 .item(item(i18n::t!("app.action.ssh_external"), |this, id, _, cx| this.ssh_external(id, cx)))
                 .separator()
                 .item(item(i18n::t!("app.share.send_file"), |this, id, _, cx| this.send_file_dialog(id, false, cx)))

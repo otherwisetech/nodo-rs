@@ -19,9 +19,12 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               is the computer running Nodo: interfaces, host name, Tailscale node; runtime only; its VM
               bridges), vms.rs (VM / container runtimes running here, guest names), services.rs
               (HTTP(S) / TCP / DNS / ICMP checks, TLS expiry from DER, Tracker state machine,
-              hourly buckets, Engine), share/ (file sharing, see below)
+              hourly buckets, Engine), share/ (file sharing, see below); otherwise-link
+              integration: links.rs (deep-link routes, links into Vigía), feed.rs (Today
+              events, live or from the file), sync.rs (devices / sites → shared registry)
 crates/i18n   nodo-i18n: embedded translation catalogs, t!/tn!/tv! macros, i18n guard tests
-crates/cli    `nodo`: list / show / scan / export / maps, on the same core
+crates/cli    `nodo`: list / show / scan / export / maps / today / sync / mcp (mcp.rs: stdio MCP
+              server, read-only unless --allow-writes), on the same core
 crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar, footer, About;
               map_view.rs: toolbar, graph canvas (rama's worktree-map approach), list;
               panel.rs: side panel, quick actions, edit form; discovery.rs: background
@@ -29,7 +32,8 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
               terminal/: embedded terminal (from plate: alacritty_terminal model, GPUI view, keys,
               colours; state.rs = pure dock / tab state; panel.rs = dock UI + SSH / ping tabs);
               launch.rs: external terminals (from rama); star.rs: GitHub star (from rama);
-              services_ui.rs: Status view, service dialog, badges; share_ui.rs: file sharing
+              services_ui.rs: Status view, service dialog, badges; share_ui.rs: file sharing;
+              otherwise.rs: link pump, Today feed of all windows, registry sync, Vigía links
 ```
 
 ## Rules
@@ -60,6 +64,11 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
   `Doc` from its own small binary (or the CLI) rather than keep the window alive. Not built yet.
   Services (`services::Engine`) start and stop with it, share its pause, and write only hourly
   buckets (at most every 10 minutes) and incidents to the map (migration 3).
+- **Otherwise Apps integration is opt-in or read-only.** The registry is touched only when
+  `hub.json` has `entities: true` (`Registry::open_shared`) and only with saved devices;
+  `nodo mcp` writes only with `--allow-writes`; links into Vigía only open its form. Tests use
+  `Root::at(tempdir)`, never the real shared folder. otherwise-link is a git tag; bumping it
+  must only change its own Cargo.lock entry.
 - **i18n is mandatory.** No user-facing string literal in `app/src`, `core/src` or `cli/src`; use
   `i18n::t!` / `tn!` and add the key to **every** `crates/i18n/locales/<lang>/` catalog in the same
   change. Untranslatable literals end their line with `// i18n-ok`.

@@ -223,6 +223,7 @@ pub struct NodoApp {
     pub recent: Vec<PathBuf>,
     pub share: crate::share_ui::ShareState,
     pub svc: crate::services_ui::SvcUi,
+    pub link: crate::otherwise::LinkState,
     _subs: Vec<Subscription>,
 }
 
@@ -266,6 +267,7 @@ impl NodoApp {
             recent: nodo_core::paths::recent(),
             share: Default::default(),
             svc: Default::default(),
+            link: Default::default(),
             _subs: subs,
         };
         this.start_share(cx);
