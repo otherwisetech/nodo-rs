@@ -62,6 +62,14 @@ cat > "$app/Contents/Info.plist" <<PLIST
       <key>CFBundleTypeIconFile</key><string>AppIcon</string>
     </dict>
   </array>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>io.github.otherwisetech.nodo-app</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>CFBundleURLSchemes</key><array><string>otherwise-nodo</string></array>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST

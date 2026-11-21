@@ -16,6 +16,8 @@ i18n.workspace = true
 nodo-core.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
+otherwise-link.workspace = true
+uuid.workspace = true
 # GitHub star count (one GET a day)
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 # PNG export of the graph (already in Cargo.lock through gpui)

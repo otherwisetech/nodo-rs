@@ -1,5 +1,7 @@
 //! `nodo`: Nodo's maps from a terminal or an agent, without the window. Same core as the app:
 //! `nodo list --json`, `nodo show <device>`, `nodo scan --passive [--save]`.
+mod mcp;
+
 use nodo_core::db::{MapData, Store};
 use nodo_core::doc::Doc;
 use nodo_core::model::*;
@@ -61,7 +63,7 @@ fn load(a: &Args) -> Result<(PathBuf, MapData), String> {
     Ok((p, s.load().map_err(|e| e.to_string())?))
 }
 
-fn device_json(d: &Device) -> serde_json::Value {
+pub(crate) fn device_json(d: &Device) -> serde_json::Value {
     let mut v = serde_json::to_value(d).unwrap_or_default();
     if let Some(o) = v.as_object_mut() {
         o.insert("primary_ip".into(), d.primary_ip().map(|i| i.to_string()).into());
@@ -72,7 +74,7 @@ fn device_json(d: &Device) -> serde_json::Value {
 
 /// A device by id, exact name, IP, MAC or host name (case-insensitive), else a unique
 /// substring of the name.
-fn find<'a>(m: &'a MapData, q: &str) -> Result<&'a Device, String> {
+pub(crate) fn find<'a>(m: &'a MapData, q: &str) -> Result<&'a Device, String> {
     let ql = q.to_lowercase();
     let mac = nodo_core::mac::normalize(q);
     let exact: Vec<&Device> = m
@@ -158,7 +160,7 @@ fn cmd_show(a: &Args) -> Result<(), String> {
     Ok(())
 }
 
-fn service_json(s: &nodo_core::services::ServiceCheck) -> serde_json::Value {
+pub(crate) fn service_json(s: &nodo_core::services::ServiceCheck) -> serde_json::Value {
     serde_json::json!({ "id": s.id, "name": s.name, "device": s.device, "kind": s.spec.kind.id(), "target": s.spec.target, "interval_s": s.spec.interval_s, "keyword": s.spec.keyword, "expect_status": s.spec.expect_status, "slow_ms": s.spec.slow_ms, "cert_days": s.spec.cert_days, "enabled": s.enabled })
 }
 
@@ -254,6 +256,50 @@ fn cmd_services(a: &Args) -> Result<(), String> {
     }
 }
 
+/// `nodo today`: what the map says needs attention (the Today view's items, from the file).
+fn cmd_today(a: &Args) -> Result<(), String> {
+    let p = map_path(a)?;
+    let s = Store::open_read_only(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+    let m = s.load().map_err(|e| e.to_string())?;
+    let (down, svcs) = nodo_core::feed::from_store(&s, &m);
+    let uid = nodo_core::sync::known_map_uid(&s).unwrap_or_default();
+    let events = nodo_core::feed::events(&uid, &down, &svcs, nodo_core::time::now());
+    if a.json {
+        println!("{}", serde_json::to_string_pretty(&events).unwrap_or_default());
+    } else if events.is_empty() {
+        println!("{}", i18n::t!("cli.today.none"));
+    } else {
+        for e in &events {
+            println!("{}  {}", e.when.as_deref().unwrap_or("-"), e.title); // i18n-ok: layout
+        }
+    }
+    Ok(())
+}
+
+/// `nodo sync`: publish the map's saved devices and sites to the shared registry (when on).
+fn cmd_sync(a: &Args) -> Result<(), String> {
+    let p = map_path(a)?;
+    let doc = Doc::open(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+    let Doc { mut store, data, .. } = doc;
+    match nodo_core::sync::sync_shared(&mut store, &data, &otherwise_link::Root::system()).map_err(|e| e.to_string())? {
+        Some(r) => {
+            if a.json {
+                println!("{}", serde_json::json!({"pushed": r.pushed, "unlinked": r.unlinked, "repointed": r.repointed, "errors": r.errors}));
+            } else {
+                println!("{}", i18n::t!("cli.sync.done", pushed = r.pushed, unlinked = r.unlinked));
+            }
+        }
+        None => println!("{}", if a.json { serde_json::json!({"enabled": false}).to_string() } else { i18n::t!("cli.sync.off") }),
+    }
+    Ok(())
+}
+
+fn cmd_mcp(a: &Args) -> Result<(), String> {
+    let map = map_path(a)?;
+    let mut srv = mcp::Server { map, writes: a.flags.iter().any(|f| f == "allow-writes") };
+    srv.serve(std::io::stdin().lock(), std::io::stdout().lock()).map_err(|e| e.to_string())
+}
+
 fn cmd_scan(a: &Args) -> Result<(), String> {
     let mut d = Discovery::default();
     let any_source = a.flags.iter().any(|f| matches!(f.as_str(), "tailscale" | "wireguard")) || a.aws_profile.is_some();
@@ -347,6 +393,9 @@ fn main() -> ExitCode {
         "scan" => cmd_scan(&a),
         "services" | "svc" => cmd_services(&a),
         "export" => cmd_export(&a),
+        "today" => cmd_today(&a),
+        "sync" => cmd_sync(&a),
+        "mcp" => cmd_mcp(&a),
         "maps" => {
             for p in nodo_core::paths::recent() {
                 println!("{}", p.display());

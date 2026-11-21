@@ -4058,7 +4058,7 @@ dependencies = [
 
 [[package]]
 name = "nodo-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -4070,29 +4070,35 @@ dependencies = [
  "nodo-core",
  "nodo-i18n",
  "objc",
+ "otherwise-link",
  "resvg 0.45.1",
  "serde_json",
  "ureq",
+ "uuid",
  "winresource",
 ]
 
 [[package]]
 name = "nodo-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "nodo-core",
  "nodo-i18n",
+ "otherwise-link",
  "serde_json",
+ "tempfile",
+ "uuid",
 ]
 
 [[package]]
 name = "nodo-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "libc",
  "mdns-sd",
  "nodo-i18n",
+ "otherwise-link",
  "ring",
  "rusqlite",
  "rustls",
@@ -4100,12 +4106,13 @@ dependencies = [
  "serde_json",
  "tempfile",
  "ureq",
+ "uuid",
  "webpki-roots",
 ]
 
 [[package]]
 name = "nodo-i18n"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "nohash-hasher"
@@ -4744,6 +4751,18 @@ checksum = "9aa2b01e1d916879f73a53d01d1d6cee68adbb31d6d9177a8cfce093cced1d50"
 dependencies = [
  "futures-core",
  "pin-project-lite",
+]
+
+[[package]]
+name = "otherwise-link"
+version = "0.1.0"
+source = "git+https://github.com/otherwisetech/otherwise-link?tag=v0.1.0#0b2969806dcac2adc79c9f21f6bd72a98d8e0be2"
+dependencies = [
+ "chrono",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

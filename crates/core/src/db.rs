@@ -57,7 +57,21 @@ pub const MIGRATIONS: &[&str] = &[
        id INTEGER PRIMARY KEY, service INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
        start INTEGER NOT NULL, end INTEGER, cause TEXT NOT NULL DEFAULT '');
      CREATE INDEX service_incidents_service ON service_incidents(service, start);",
+    // 4: links to the shared entity registry of the Otherwise apps (opt-in): `kind` is
+    // `device` or `site`, `local` the device id or the site's name, `card` what was last pushed
+    "CREATE TABLE shared_links (
+       kind TEXT NOT NULL, local TEXT NOT NULL, shared_id TEXT NOT NULL, card TEXT NOT NULL DEFAULT '',
+       PRIMARY KEY (kind, local));",
 ];
+
+/// A device or site of this map linked to a card of the shared registry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedLink {
+    pub kind: String,
+    pub local: String,
+    pub shared_id: String,
+    pub card: String,
+}
 
 /// One outage of a service: from `start` until `end` (None while still down).
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -482,6 +496,27 @@ impl Store {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    pub fn shared_links(&self) -> Result<Vec<SharedLink>> {
+        let mut st = self.conn.prepare("SELECT kind, local, shared_id, card FROM shared_links ORDER BY kind, local")?;
+        let rows = st.query_map([], |r| Ok(SharedLink { kind: r.get(0)?, local: r.get(1)?, shared_id: r.get(2)?, card: r.get(3)? }))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn set_shared_link(&mut self, kind: &str, local: &str, shared_id: &str, card: &str) -> Result<()> {
+        self.conn.execute("INSERT INTO shared_links (kind, local, shared_id, card) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(kind, local) DO UPDATE SET shared_id = excluded.shared_id, card = excluded.card", params![kind, local, shared_id, card])?;
+        Ok(())
+    }
+
+    pub fn delete_shared_link(&mut self, kind: &str, local: &str) -> Result<()> {
+        self.conn.execute("DELETE FROM shared_links WHERE kind = ?1 AND local = ?2", params![kind, local])?;
+        Ok(())
+    }
+
+    /// Links to card `from` now point at `to` (merged in the registry).
+    pub fn repoint_shared(&mut self, from: &str, to: &str) -> Result<usize> {
+        Ok(self.conn.execute("UPDATE shared_links SET shared_id = ?2 WHERE shared_id = ?1", params![from, to])?)
+    }
+
     /// Up/down transitions of a device since `since`, oldest first (for uptime).
     pub fn transitions(&self, device: DeviceId, since: i64) -> Result<Vec<(i64, bool)>> {
         let mut st = self.conn.prepare("SELECT at, kind FROM events WHERE device = ?1 AND at >= ?2 AND kind IN ('up', 'down') ORDER BY at, id")?;
@@ -604,6 +639,14 @@ mod tests {
         assert_eq!(s.services().unwrap()[0].device, None, "the service outlives its device");
         s.delete_service(svc.id).unwrap();
         assert!(s.incidents(Some(svc.id), 10).unwrap().is_empty() && s.service_hours(svc.id, 0).unwrap().is_empty());
+        // version 4: links to the shared registry
+        s.set_shared_link("device", "7", "a", "{}").unwrap();
+        s.set_shared_link("device", "7", "b", "{\"x\":1}").unwrap();
+        s.set_shared_link("site", "Office", "c", "").unwrap();
+        assert_eq!(s.repoint_shared("c", "b").unwrap(), 1);
+        assert_eq!(s.shared_links().unwrap().iter().map(|l| (l.kind.as_str(), l.local.as_str(), l.shared_id.as_str())).collect::<Vec<_>>(), vec![("device", "7", "b"), ("site", "Office", "b")]);
+        s.delete_shared_link("site", "Office").unwrap();
+        assert_eq!(s.shared_links().unwrap().len(), 1);
         drop(s);
         // creating over an existing file starts empty
         let s = Store::create(&p).unwrap();

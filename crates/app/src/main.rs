@@ -8,6 +8,7 @@ mod discovery;
 mod export_ui;
 mod launch;
 mod map_view;
+mod otherwise;
 mod panel;
 mod services_ui;
 mod settings;
@@ -194,10 +195,25 @@ fn main() {
         println!("{}", i18n::t!("app.cli.usage"));
         return;
     }
-    let initial: Option<PathBuf> = arg.map(PathBuf::from);
+    // Linux / Windows hand a deep link over as the argument; `%u` may also turn a map into a
+    // file:// URL
+    let (initial, link) = match arg.as_deref() {
+        Some(a) if a.starts_with("file://") => (file_url_to_path(a), None),
+        Some(a) if a.contains("://") => (None, Some(a.to_string())),
+        Some(a) => (Some(PathBuf::from(a)), None),
+        None => (None, None),
+    };
+    otherwise::INBOUND.lock().unwrap_or_else(|e| e.into_inner()).extend(link.clone());
+    std::thread::spawn(otherwise::register_scheme);
     // tailscale / aws / wg live on the login shell's PATH; resolve it while the window opens
     nodo_core::shell_env::init();
-    gpui_platform::application().with_assets(AppAssets).run(move |cx| {
+    let application = gpui_platform::application().with_assets(AppAssets);
+    application.on_open_urls(|urls| {
+        let (files, links): (Vec<String>, Vec<String>) = urls.into_iter().partition(|u| u.starts_with("file://"));
+        otherwise::INBOUND.lock().unwrap_or_else(|e| e.into_inner()).extend(links);
+        OPEN_FILES.lock().unwrap_or_else(|e| e.into_inner()).extend(files.iter().filter_map(|f| file_url_to_path(f)));
+    });
+    application.run(move |cx| {
         if let Err(e) = cx.text_system().add_fonts(FONTS.iter().map(|f| Cow::Borrowed(*f)).collect()) {
             eprintln!("fonts: {e}");
         }
@@ -221,8 +237,37 @@ fn main() {
             }
         })
         .detach();
-        open_window(initial.clone(), false, cx);
+        // a link alone opens its own window (the pump decides which map)
+        if link.is_none() || initial.is_some() {
+            open_window(initial.clone(), false, cx);
+        }
+        cx.spawn(async move |cx| {
+            let mut retry = Vec::new();
+            loop {
+                cx.background_executor().timer(std::time::Duration::from_millis(250)).await;
+                cx.update(|cx| {
+                    otherwise::pump(cx, &mut retry);
+                    for p in std::mem::take(&mut *OPEN_FILES.lock().unwrap_or_else(|e| e.into_inner())) {
+                        open_window(Some(p), false, cx);
+                    }
+                });
+            }
+        })
+        .detach();
     });
+}
+
+/// Map files Finder asked us to open while running.
+static OPEN_FILES: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+/// `file:///Users/a/My%20map.nodo` → `/Users/a/My map.nodo`.
+fn file_url_to_path(url: &str) -> Option<PathBuf> {
+    let rest = url.strip_prefix("file://")?;
+    let rest = rest.strip_prefix("localhost").unwrap_or(rest);
+    let decoded = otherwise_link::link::decode(rest, false).ok()?;
+    // file:///C:/x on Windows
+    let decoded = if cfg!(windows) { decoded.trim_start_matches('/').to_string() } else { decoded };
+    Some(PathBuf::from(decoded))
 }
 
 /// A new window: on `path`'s map if given, else the welcome screen (`new_map`: ask for a new

@@ -145,7 +145,46 @@ nodo export mermaid --layout subnet   # or svg, pdf, csv, json; -o FILE
 nodo services add https https://example.com --name "Website" --keyword "Example Domain"
 nodo services list --json             # uptime 24 h / 7 d / 30 d and incidents
 nodo services check                   # run every check now; exit code 1 if one fails
+nodo today --json                     # what needs attention: devices / services down, certificates
+nodo sync                             # publish saved devices and sites to the shared registry (if on)
+nodo mcp                              # MCP server on stdio (read-only; --allow-writes adds writes)
 ```
+
+## Otherwise Apps
+
+Nodo plugs into [otherwise-link](https://github.com/otherwisetech/otherwise-link), the shared
+layer of the Otherwise Technologies apps. Everything stays on the computer.
+
+- **Deep links.** `otherwise-nodo://` (and `otherwise://nodo/…` through Otherwise Apps) is
+  registered by the bundle's `Info.plist`, the Linux entry
+  (`packaging/linux/io.github.otherwisetech.nodo-app.desktop`, `Exec=… %u`) and
+  `HKCU\Software\Classes` on Windows.
+
+  | Link | Opens |
+  |------|-------|
+  | `otherwise://nodo` | a window |
+  | `otherwise://nodo/device/<id>?map=<uid>` | a device, in the map with that uid (opened from the recent maps if needed) |
+  | `otherwise://nodo/service/<id>?map=<uid>` | a service in the Status view |
+  | `otherwise://nodo/entity/<uuid>` | the device linked to a shared card |
+
+  A map's uid is stored in the map file, so links survive moving it.
+- **Today.** While a map is open and watched, devices down, services down or slow and
+  certificates expiring within 30 days (or the service's own warning) go to
+  `today/nodo.json` for Otherwise Apps' Today view. Alerts expire a couple of hours after
+  Nodo last wrote them, so nothing stale stays behind when Nodo quits. Settings → *Show … in
+  the Today view* turns it off.
+- **Vigía.** A certificate event (and the calendar button of an HTTPS service in the Status
+  view) opens Vigía's new-item form prefilled: type certificate, the host, the expiry, under
+  the domain as a digital asset. A device's *More* menu has *Add warranty in Vigía*. Nothing is
+  saved in Vigía until you do.
+- **Shared entities** (only when turned on in Otherwise Apps). Saved devices are published as
+  `device` cards (MACs, host names, IPs, Tailscale node, vendor, model, OS) and the places in
+  their *Location* as `site` cards; a device's *Owner* is shown as a company or person when the
+  registry has one by that name. Pushed again only when something changed; devices taken out
+  of the inventory are unlinked; merges and deletes made in Otherwise Apps are followed.
+- **MCP.** `nodo mcp` is a stdio MCP server, read-only: `devices`, `device`, `services`,
+  `status`. With `--allow-writes` (which Otherwise Apps' hub passes only when you allow write
+  tools) it adds `update_device` and `add_service`, each recorded in the device's history.
 
 ## Download
 
@@ -156,7 +195,7 @@ Ready-made builds for macOS (Apple silicon and Intel), Linux and Windows are att
   right-click it → *Open* (or `xattr -dr com.apple.quarantine /Applications/Nodo.app`). The `nodo`
   CLI is inside: `/Applications/Nodo.app/Contents/MacOS/nodo`.
 - **Linux:** extract the `.tar.gz` and run `./nodo-app` (`./nodo` for the CLI); copy
-  `nodo.desktop` and the icon to `~/.local/share/applications` / `~/.local/share/icons` for a menu
+  `io.github.otherwisetech.nodo-app.desktop` and the icon to `~/.local/share/applications` / `~/.local/share/icons` for a menu
   entry. Needs Vulkan.
 - **Windows:** unzip and run `nodo-app.exe` (SmartScreen may ask to confirm, since it is unsigned).
 

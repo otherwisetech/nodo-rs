@@ -495,6 +495,7 @@ impl NodoApp {
                     }
                     this.drain_monitor(cx);
                     this.drain_services(cx);
+                    this.integration_tick(cx);
                     true
                 });
                 if !matches!(go, Ok(true)) {
@@ -509,6 +510,7 @@ impl NodoApp {
         if let Some(e) = self.mon.engine.take() {
             e.stop();
         }
+        self.leave_map();
         self.stop_services();
         self.mon.loop_gen += 1;
         self.mon.states.clear();
