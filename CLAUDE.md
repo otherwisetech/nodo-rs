@@ -27,7 +27,9 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
 ## Rules
 
 - **Passive by default, active only on an explicit action.** Refresh = neighbour table, mDNS,
-  SSDP. The subnet scan runs only from *Scan subnet…* after the confirmation dialog with the
+  SSDP, plus `tailscale status --json` when the CLI is found (local daemon only; run it with
+  `TAILSCALE_BE_CLI=1`, or the macOS app binary started without TERM opens its GUI and prints
+  nothing). The subnet scan runs only from *Scan subnet…* after the confirmation dialog with the
   "only scan networks you own or administer" warning; private ranges only (`ScanOptions::
   allow_public` stays false in the app), rate-limited, /24 at most. Never add a background scan.
 - **Nothing leaves the computer** except the optional once-a-day star count. AWS goes through the

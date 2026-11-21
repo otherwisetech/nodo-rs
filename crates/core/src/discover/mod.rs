@@ -1,5 +1,6 @@
-//! Discovery sources. Passive ones (neighbour table, mDNS, SSDP) run on refresh; the active
-//! subnet scan, Tailscale, AWS and WireGuard run only when the user asks.
+//! Discovery sources. Passive ones (neighbour table, mDNS, SSDP) run on refresh, and so does
+//! Tailscale when installed (it only reads the local daemon's status); the active subnet scan,
+//! AWS and WireGuard run only when the user asks.
 pub mod arp;
 pub mod aws;
 pub mod classify;

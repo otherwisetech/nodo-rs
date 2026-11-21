@@ -452,6 +452,12 @@ pub struct Observation {
     pub facts: Vec<(String, String)>,
     /// When the source last saw it (unix seconds), if it says; else "now".
     pub seen_at: Option<i64>,
+    /// Who the device belongs to, per the source (a tailnet user); fills `Device::owner`
+    /// unless the user typed one.
+    pub owner: Option<String>,
+    /// LAN addresses the source says this machine has (Tailscale endpoints): only used to find
+    /// the LAN device it is, never stored as addresses.
+    pub lan_hints: Vec<IpAddr>,
 }
 
 impl Observation {

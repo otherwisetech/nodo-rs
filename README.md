@@ -37,8 +37,11 @@ for scripts and AI agents.
   a time and at most 400 attempts per second; open ports hint the device type. Private ranges only,
   with a clear *only scan networks you own or administer* warning before it starts.
 - **Tailscale**: `tailscale status --json` from the CLI on your PATH or inside
-  `/Applications/Tailscale.app`: every node with its name, addresses, OS, online state, exit node,
-  tags, owner and whether the connection is direct or relayed.
+  `/Applications/Tailscale.app` (or `~/Applications`): every node with its name, addresses, OS,
+  online state, exit node, tags, owner (the tailnet user's name; group the list by owner) and
+  whether the connection is direct or relayed. When Tailscale is installed it runs with every
+  refresh (on open, ⌘R and every few minutes); the side panel's Sources section shows
+  "Tailscale: 12 devices · updated 10:42" or what went wrong.
 - **AWS**, read-only, through **your own AWS CLI** and profile (SSO works): `aws ec2
   describe-vpcs / describe-subnets / describe-instances / describe-security-groups /
   describe-client-vpn-endpoints --output json`, for the regions you choose. VPCs and their subnets
@@ -54,7 +57,8 @@ for scripts and AI agents.
   map (greyed) while offline. A device is **one device across IP changes**: it is recognised by
   MAC, Tailscale node, AWS instance id, WireGuard key or mDNS name before its IP, and an address
   that moved to another machine is taken from the old one. A LAN machine and its Tailscale node
-  join when their host name is unambiguous. **Merge** and **split** fix the rest by hand.
+  join when their host name is unambiguous, when the node's LAN endpoint is the machine's address,
+  and for this computer itself, so each appears once on both networks. **Merge** and **split** fix the rest by hand.
 - **Monitoring while the app is open**: saved devices (or any you choose) are checked every 30 s
   (configurable) with the system `ping`, falling back to a TCP connect to a port the device is
   known to answer on. Latency, uptime this session, last seen; a history per device (discovered,

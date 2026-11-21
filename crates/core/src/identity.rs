@@ -51,7 +51,20 @@ pub fn find(devices: &[Device], o: &Observation) -> Option<usize> {
     if let Some((_, i)) = best {
         return Some(i);
     }
-    // 3. a host name only one device has (joins a LAN machine with its Tailscale node)
+    let unique = |hits: Vec<usize>| if let [one] = hits.as_slice() { Some(*one) } else { None };
+    let hinted = |d: &Device| d.addrs.iter().any(|a| a.layer == Layer::Lan && o.lan_hints.contains(&a.ip));
+    // 3. this computer seen by another source (its Tailscale node and its LAN interface); with
+    //    hints, only if they agree (a synced map may have been made on another computer)
+    if o.facts.iter().any(|(k, _)| k == "this_computer")
+        && let Some(i) = unique(devices.iter().enumerate().filter(|(_, d)| d.fact("this_computer").is_some() && (o.lan_hints.is_empty() || hinted(d)) && !conflicts(d, &o.idents)).map(|(i, _)| i).collect())
+    {
+        return Some(i);
+    }
+    // 4. the one LAN device holding an address the source says the machine has
+    if let Some(i) = unique(devices.iter().enumerate().filter(|(_, d)| hinted(d) && !conflicts(d, &o.idents)).map(|(i, _)| i).collect()) {
+        return Some(i);
+    }
+    // 5. a host name only one device has (joins a LAN machine with its Tailscale node)
     for id in o.idents.iter().filter(|i| i.kind == IdentKind::Host && !generic_host(&i.value)) {
         let hits: Vec<usize> = devices.iter().enumerate().filter(|(_, d)| d.idents.contains(id) && !conflicts(d, &o.idents)).map(|(i, _)| i).collect();
         if let [one] = hits.as_slice() {
@@ -249,6 +262,13 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
     }
     if let Some(h) = &o.hostname {
         d.hostname = Some(h.clone());
+    }
+    // the source's owner until the user types one (`owner_auto` remembers what we filled in)
+    if let Some(owner) = o.owner.as_deref().filter(|w| !w.is_empty())
+        && (d.owner.is_empty() || d.fact("owner_auto") == Some(d.owner.as_str()))
+    {
+        d.owner = owner.to_string();
+        d.set_fact("owner_auto", owner);
     }
     if let Some(os) = &o.os {
         d.os = Some(os.clone());
@@ -532,5 +552,43 @@ mod tests {
         // the next ARP read keeps them apart
         let r = ingest(&mut m, &Discovery { devices: vec![arp("192.168.1.11", "00:11:22:33:44:02")], ..Default::default() }, 6);
         assert_eq!(r.updated, vec![new_id]);
+    }
+
+    #[test]
+    fn tailnet_joins_lan_devices_and_fills_owners() {
+        let mut m = MapData::default();
+        let lan = NetworkObservation { key: "lan:192.168.50.0/24".into(), name: "192.168.50.0/24".into(), layer: Some(Layer::Lan), cidr: Some("192.168.50.0/24".into()), ..Default::default() };
+        // this computer as passive discovery sees it (its LAN host name differs from Tailscale's)
+        let mut me = arp("192.168.50.7", "00:11:22:33:44:07").ident(IdentKind::Host, "ana-mbp");
+        me.facts.push(("this_computer".into(), "1".into()));
+        // the computer's VM bridge, another LAN "device" holding one of the self endpoints
+        let bridge = arp("192.168.64.1", "be:00:00:00:00:01");
+        let studio = arp("192.168.50.20", "00:11:22:33:44:20");
+        let tv = arp("192.168.50.51", "00:11:22:33:44:51");
+        ingest(&mut m, &Discovery { networks: vec![lan], devices: vec![me, bridge, studio, tv], notes: vec![] }, 10);
+        assert_eq!(m.devices.len(), 4);
+        let ts = crate::discover::tailscale::parse_status(crate::discover::tailscale::tests::STATUS_1_104).unwrap();
+        let r = ingest(&mut m, &ts, 20);
+        assert_eq!(r.new.len(), 3, "desktop, phone, vps are new; this computer and the studio join LAN devices");
+        assert_eq!(m.devices.len(), 7);
+        let me = m.devices.iter().find(|d| d.fact("this_computer").is_some()).unwrap();
+        assert_eq!(me.layers(), vec![Layer::Lan, Layer::Tailscale], "this computer appears once, on both networks");
+        assert!(me.ident(IdentKind::Mac).is_some() && me.ident(IdentKind::TailscaleNode) == Some("nSelfAAAA"));
+        assert_eq!(me.owner, "Ana P");
+        let studio = m.devices.iter().find(|d| d.ident(IdentKind::TailscaleNode) == Some("nStudioCCC")).unwrap();
+        assert!(studio.addrs.iter().any(|a| a.ip.to_string() == "192.168.50.20"), "the direct LAN endpoint joins it to the LAN device");
+        let bridge = m.devices.iter().find(|d| d.addrs.iter().any(|a| a.ip.to_string() == "192.168.64.1")).unwrap();
+        assert!(bridge.ident(IdentKind::TailscaleNode).is_none());
+        let owners: Vec<&str> = m.devices.iter().filter(|d| d.layers().contains(&Layer::Tailscale)).map(|d| d.owner.as_str()).collect();
+        assert_eq!(owners.len(), 5);
+        assert!(owners.contains(&"Example Office") && owners.contains(&"ops@example.net"));
+        // an owner the user typed stays; the source's own keeps following the tailnet
+        let id = m.devices.iter().find(|d| d.ident(IdentKind::TailscaleNode) == Some("nDeskBBBB")).unwrap().id;
+        m.device_mut(id).unwrap().owner = "Reception".into();
+        let again = crate::discover::tailscale::parse_status(&crate::discover::tailscale::tests::STATUS_1_104.replace("\"DisplayName\": \"Ana P\"", "\"DisplayName\": \"Ana Pérez\"").replace("\"DisplayName\": \"Example Office\"", "\"DisplayName\": \"Office\"")).unwrap();
+        let r = ingest(&mut m, &again, 30);
+        assert!(r.new.is_empty(), "a second run updates the same devices");
+        assert_eq!(m.device(id).unwrap().owner, "Reception");
+        assert_eq!(m.devices.iter().find(|d| d.fact("this_computer").is_some()).unwrap().owner, "Ana Pérez");
     }
 }

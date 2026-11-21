@@ -66,6 +66,16 @@ pub fn local_time(secs: i64) -> String {
     datetime(secs, local_offset())
 }
 
+/// "10:42" today, else "2026-11-19 10:42", in this computer's zone.
+pub fn clock(secs: i64, now: i64) -> String {
+    clock_at(secs, now, local_offset())
+}
+
+fn clock_at(secs: i64, now: i64, offset: i32) -> String {
+    let (a, b) = (datetime(secs, offset), datetime(now, offset));
+    if a.get(..10) == b.get(..10) { a.get(11..).unwrap_or_default().to_string() } else { a }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,6 +83,8 @@ mod tests {
     #[test]
     fn dates_and_ago() {
         assert_eq!(datetime(0, 0), "1970-01-01 00:00");
+        assert_eq!(clock_at(10 * 3600 + 42 * 60, 23 * 3600, 0), "10:42");
+        assert_eq!(clock_at(0, 2 * 86_400, 0), "1970-01-01 00:00");
         assert_eq!(datetime(1_795_000_000, -5 * 3600), "2026-11-18 06:06");
         assert_eq!(parse_offset("-0500"), Some(-18000));
         assert_eq!(parse_offset("+0530"), Some(19800));

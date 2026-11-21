@@ -2,6 +2,8 @@
 core.tailscale.not_found = Tailscale CLI not found. Install Tailscale (on macOS the app includes it) and try again.
 core.tailscale.bad_output = Could not read Tailscale's status: {detail}
 core.tailscale.failed = Tailscale did not answer: {detail}
+core.tailscale.timeout = Tailscale did not answer within {secs} s.
+core.tailscale.not_running = Tailscale is not connected (state: {state}). Open Tailscale and connect.
 core.aws.not_found = AWS CLI not found. Install it (aws) and set up a profile with `aws configure sso`.
 core.aws.sso_expired = The SSO session for "{profile}" has expired. Run `aws sso login --profile {profile}` in a terminal, then try again.
 core.aws.no_credentials = No credentials for profile "{profile}". Set it up with `aws configure sso --profile {profile}`.

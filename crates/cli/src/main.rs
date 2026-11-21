@@ -192,7 +192,7 @@ fn cmd_scan(a: &Args) -> Result<(), String> {
                 serde_json::json!({
                     "source": o.source.map(|s| s.id()), "layer": o.layer.map(|l| l.id()), "ips": o.ips.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
                     "idents": o.idents, "name": o.name, "hostname": o.hostname, "vendor": o.vendor, "model": o.model, "os": o.os,
-                    "type": o.kind.map(|k| k.id()), "online": o.online, "services": o.services, "facts": o.facts,
+                    "type": o.kind.map(|k| k.id()), "online": o.online, "owner": o.owner, "services": o.services, "facts": o.facts,
                 })
             })
             .collect();

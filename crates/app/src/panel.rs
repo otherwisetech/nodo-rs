@@ -14,7 +14,7 @@ use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_component::spinner::Spinner;
 use gpui_component::{IconName, Sizable as _};
-use nodo_core::model::{Device, DeviceId, DeviceKind, EventKind, IdentKind, Layer, Link};
+use nodo_core::model::{Device, DeviceId, DeviceKind, EventKind, IdentKind, Layer, Link, Source};
 use nodo_core::tools::Tool;
 use std::net::IpAddr;
 
@@ -98,6 +98,16 @@ fn fact_label(k: &str) -> Option<String> {
         "rx_bytes" | "tx_bytes" | "name_rank" => return None,
         _ => return None,
     })
+}
+
+/// A CLI source's name, as its layer is called.
+fn source_label(s: Source) -> String {
+    match s {
+        Source::Tailscale => layer_label(Layer::Tailscale),
+        Source::Aws => layer_label(Layer::Aws),
+        Source::WireGuard => layer_label(Layer::WireGuard),
+        other => other.id().to_string(),
+    }
 }
 
 impl NodoApp {
@@ -372,9 +382,25 @@ impl NodoApp {
                 cx.notify();
             })));
         }
-        if !self.disc.notes.is_empty() {
+        let ran: Vec<Source> = self.disc.runs.iter().map(|(s, _)| *s).collect();
+        let others: Vec<&(Source, String)> = self.disc.notes.iter().filter(|(s, _)| !ran.contains(s)).collect();
+        if !self.disc.runs.is_empty() || !others.is_empty() {
             s = s.child(div().pt(px(6.)).child(ui::section_title(t, i18n::t!("app.summary.notes"))));
-            for (src, n) in &self.disc.notes {
+            for (src, run) in &self.disc.runs {
+                let name = source_label(*src);
+                let ok = (run.devices > 0 || run.error.is_none()).then(|| i18n::tn!("app.source.ok", run.devices, source = name.clone(), time = crate::util::clock(run.at, now)));
+                let bad = run.error.is_some();
+                let mut row = div().flex().flex_col().gap(px(2.)).p(px(8.)).rounded(px(6.)).bg(if bad { t.tag.opacity(0.10) } else { t.up.opacity(0.08) }).text_size(px(12.)).line_height(px(17.));
+                row = match ok {
+                    Some(line) => row.child(div().flex().items_center().gap(px(6.)).child(div().size(px(7.)).rounded_full().bg(if bad { t.tag } else { t.up })).child(line)),
+                    None => row.child(div().font_weight(FontWeight::SEMIBOLD).child(i18n::t!("app.source.failed", source = name.clone(), time = crate::util::clock(run.at, now)))),
+                };
+                if let Some(e) = &run.error {
+                    row = row.child(div().text_color(t.ink_muted).child(e.clone()));
+                }
+                s = s.child(row);
+            }
+            for (src, n) in others {
                 s = s.child(div().flex().flex_col().gap(px(2.)).p(px(8.)).rounded(px(6.)).bg(t.tag.opacity(0.10)).text_size(px(12.)).line_height(px(17.)).child(div().font_weight(FontWeight::SEMIBOLD).child(src.id().to_string())).child(n.clone()));
             }
         }

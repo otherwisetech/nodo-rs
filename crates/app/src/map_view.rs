@@ -93,7 +93,7 @@ impl NodoApp {
                     w.update(cx, |this, cx| f(this, window, cx)).ok();
                 })
             };
-            menu.item(item(i18n::t!("app.discover.tailscale"), |this, _, cx| this.discover_tailscale(cx)))
+            menu.item(item(i18n::t!("app.discover.tailscale"), |this, _, cx| this.discover_tailscale(true, cx)))
                 .item(item(i18n::t!("app.discover.aws"), |this, window, cx| this.open_aws(window, cx)))
                 .item(item(i18n::t!("app.discover.wireguard"), |this, _, cx| this.discover_wireguard(cx)))
                 .separator()
@@ -130,7 +130,7 @@ impl NodoApp {
             .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink).child(if self.disc.passive { i18n::t!("app.empty.listening") } else { i18n::t!("app.empty.title") }))
             .child(div().max_w(px(460.)).text_center().text_size(px(13.)).line_height(px(19.)).child(i18n::t!("app.empty.body")))
             .when(self.disc.passive, |d| d.child(Spinner::new().color(t.accent)))
-            .child(div().flex().gap(px(8.)).child(ui::outline_button(t, "empty-scan").child(i18n::t!("app.discover.scan")).on_click(cx.listener(|this, _, _, cx| this.ask_scan(cx)))).child(ui::outline_button(t, "empty-ts").child(i18n::t!("app.discover.tailscale")).on_click(cx.listener(|this, _, _, cx| this.discover_tailscale(cx)))))
+            .child(div().flex().gap(px(8.)).child(ui::outline_button(t, "empty-scan").child(i18n::t!("app.discover.scan")).on_click(cx.listener(|this, _, _, cx| this.ask_scan(cx)))).child(ui::outline_button(t, "empty-ts").child(i18n::t!("app.discover.tailscale")).on_click(cx.listener(|this, _, _, cx| this.discover_tailscale(true, cx)))))
             .into_any_element()
     }
 
@@ -241,10 +241,11 @@ impl NodoApp {
             Sort::Status => i18n::t!("app.list.col_status"),
             Sort::LastSeen => i18n::t!("app.list.col_seen"),
             Sort::Layer => i18n::t!("app.list.col_layers"),
+            Sort::Owner => i18n::t!("app.list.col_owner"),
         };
         let weak = cx.entity().downgrade();
         Button::new("list-sort").ghost().small().icon(if self.view.sort_desc { IconName::SortDescending } else { IconName::SortAscending }).label(i18n::t!("app.list.sort_by", by = label(cur))).dropdown_menu(move |mut menu, _, _| {
-            for s in [Sort::Name, Sort::Kind, Sort::Ip, Sort::Status, Sort::LastSeen, Sort::Layer] {
+            for s in [Sort::Name, Sort::Kind, Sort::Ip, Sort::Status, Sort::LastSeen, Sort::Layer, Sort::Owner] {
                 let w = weak.clone();
                 menu = menu.item(PopupMenuItem::new(label(s)).checked(s == cur).on_click(move |_, _, cx| {
                     w.update(cx, |this, cx| this.sort_by(s, cx)).ok();
@@ -561,6 +562,7 @@ impl NodoApp {
             Sort::Status => rows.sort_by_key(|d| (rank(st(d)), d.name.to_lowercase())),
             Sort::LastSeen => rows.sort_by_key(|d| std::cmp::Reverse(d.last_seen)),
             Sort::Layer => rows.sort_by_key(|d| (d.layers().first().copied(), d.name.to_lowercase())),
+            Sort::Owner => rows.sort_by_key(|d| (d.owner.trim().is_empty(), d.owner.trim().to_lowercase(), d.name.to_lowercase())),
         }
         if self.view.sort_desc {
             rows.reverse();
@@ -593,7 +595,14 @@ impl NodoApp {
             .child(head("h-seen", Some(110.), i18n::t!("app.list.col_seen"), Sort::LastSeen, cx));
         let hover = if t.dark { t.border } else { t.canvas };
         let mut list = div().id("dev-list").flex().flex_col().flex_1().min_h_0().overflow_y_scroll();
+        let group = self.view.sort == Sort::Owner;
         for (k, d) in rows.iter().enumerate() {
+            let owner = d.owner.trim();
+            if group && (k == 0 || !rows[k - 1].owner.trim().eq_ignore_ascii_case(owner)) {
+                let n = rows.iter().filter(|x| x.owner.trim().eq_ignore_ascii_case(owner)).count();
+                let title = if owner.is_empty() { i18n::t!("app.list.no_owner") } else { owner.to_string() };
+                list = list.child(div().flex().flex_none().items_center().gap(px(8.)).h(px(28.)).px(px(12.)).bg(t.canvas).border_b_1().border_color(t.border).text_size(px(11.5)).font_weight(FontWeight::SEMIBOLD).child(icon(IconName::User, 12., t.ink_muted)).child(title).child(div().text_color(t.ink_muted).font_weight(FontWeight::NORMAL).child(i18n::tn!("app.devices.count", n))));
+            }
             let s = st(d);
             let selected = self.selected == Some(Sel::Device(d.id));
             let id = d.id;

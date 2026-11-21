@@ -31,7 +31,26 @@ pub struct DiscState {
     pub notes: Vec<(Source, String)>,
     pub last_refresh: Option<i64>,
     pub local: Option<LocalNet>,
+    /// The last run of each CLI source, for the Sources panel.
+    pub runs: Vec<(Source, SourceRun)>,
+    /// Tailscale's CLI is installed (looked up once); it then runs with every refresh.
+    pub tailscale_found: Option<bool>,
     auto_gen: u64,
+}
+
+/// "Tailscale: 12 devices · updated 10:42" or what went wrong.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceRun {
+    pub at: i64,
+    pub devices: usize,
+    pub error: Option<String>,
+}
+
+impl SourceRun {
+    pub fn of(d: &Discovery, src: Source, at: i64) -> SourceRun {
+        let error = d.notes.iter().filter(|(s, _)| *s == src).map(|(_, n)| n.clone()).next();
+        SourceRun { at, devices: d.devices.iter().filter(|o| o.source == Some(src)).count(), error }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -126,6 +145,13 @@ impl NodoApp {
         status_of(d, &self.mon.states, nodo_core::time::now())
     }
 
+    fn record_run(&mut self, src: Source, d: &Discovery) {
+        let run = SourceRun::of(d, src, nodo_core::time::now());
+        self.disc.runs.retain(|(s, _)| *s != src);
+        self.disc.runs.push((src, run));
+        self.disc.runs.sort_by_key(|(s, _)| s.id());
+    }
+
     fn note(&mut self, notes: Vec<(Source, String)>, ran: &[Source]) {
         self.disc.notes.retain(|(s, _)| !ran.contains(s));
         self.disc.notes.extend(notes);
@@ -180,11 +206,38 @@ impl NodoApp {
                 this.disc.local = net;
                 this.disc.last_refresh = Some(nodo_core::time::now());
                 this.apply(d, &[Source::Arp, Source::Mdns, Source::Ssdp], cx);
+                // after the LAN devices are in, so tailnet nodes can join them
+                this.auto_tailscale(cx);
             })
             .ok();
         })
         .detach();
         cx.notify();
+    }
+
+    /// Tailscale only reads the local daemon's status, so it rides along with every refresh
+    /// (on open, ⌘R, every few minutes) once its CLI is found; problems go to the Sources
+    /// panel, not toasts.
+    fn auto_tailscale(&mut self, cx: &mut Context<Self>) {
+        match self.disc.tailscale_found {
+            Some(true) => self.discover_tailscale(false, cx),
+            Some(false) => {}
+            None => {
+                self.disc.tailscale_found = Some(false);
+                let task = cx.background_executor().spawn(async move { nodo_core::discover::tailscale::find_cli().is_some() });
+                cx.spawn(async move |this, cx| {
+                    let found = task.await;
+                    this.update(cx, |this, cx| {
+                        this.disc.tailscale_found = Some(found);
+                        if found {
+                            this.discover_tailscale(false, cx);
+                        }
+                    })
+                    .ok();
+                })
+                .detach();
+            }
+        }
     }
 
     pub fn start_auto_refresh(&mut self, cx: &mut Context<Self>) {
@@ -282,7 +335,8 @@ impl NodoApp {
         cx.notify();
     }
 
-    pub fn discover_tailscale(&mut self, cx: &mut Context<Self>) {
+    /// `manual`: from the Sources menu, so problems also show as a toast.
+    pub fn discover_tailscale(&mut self, manual: bool, cx: &mut Context<Self>) {
         if self.disc.tailscale || self.doc.is_none() {
             return;
         }
@@ -292,10 +346,14 @@ impl NodoApp {
             let d = task.await;
             this.update(cx, |this, cx| {
                 this.disc.tailscale = false;
-                if !d.notes.is_empty() && d.devices.is_empty() {
+                if !d.devices.is_empty() {
+                    this.disc.tailscale_found = Some(true);
+                }
+                if manual && !d.notes.is_empty() {
                     let msg = d.notes[0].1.clone();
                     this.toast(msg, cx);
                 }
+                this.record_run(Source::Tailscale, &d);
                 this.apply(d, &[Source::Tailscale], cx);
             })
             .ok();
@@ -328,6 +386,7 @@ impl NodoApp {
                     let msg = d.notes[0].1.clone();
                     this.toast(msg, cx);
                 }
+                this.record_run(Source::Aws, &d);
                 this.apply(d, &[Source::Aws], cx);
             })
             .ok();
@@ -350,6 +409,7 @@ impl NodoApp {
                     let note = d.notes.first().map(|n| n.1.clone()).unwrap_or_else(|| i18n::t!("app.wg.none"));
                     this.dialog = Some(Dialog::WireGuard { note });
                 }
+                this.record_run(Source::WireGuard, &d);
                 this.apply(d, &[Source::WireGuard], cx);
             })
             .ok();

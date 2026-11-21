@@ -21,9 +21,17 @@ pub enum CmdError {
 
 /// Run `program args…`, killing it after `timeout`.
 pub fn run(program: &Path, args: &[&str], timeout: Duration) -> Result<Output, CmdError> {
+    run_env(program, args, &[], timeout)
+}
+
+/// [`run`] with extra environment variables.
+pub fn run_env(program: &Path, args: &[&str], env: &[(&str, &str)], timeout: Duration) -> Result<Output, CmdError> {
     let mut c = Command::new(program);
     c.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     for (k, v) in crate::shell_env::resolved() {
+        c.env(k, v);
+    }
+    for (k, v) in env {
         c.env(k, v);
     }
     // never let a CLI wait for a pager or a prompt

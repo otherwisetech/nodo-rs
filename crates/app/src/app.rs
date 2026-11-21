@@ -132,6 +132,8 @@ pub enum Sort {
     Status,
     LastSeen,
     Layer,
+    /// Grouped by owner (tailnet user or typed), with a header per owner.
+    Owner,
 }
 
 /// How the map is shown: graph or list, layout, layers, pan / zoom.
@@ -866,7 +868,7 @@ impl Render for NodoApp {
             .on_action(cx.listener(|this, _: &Escape, window, cx| this.escape(window, cx)))
             .on_action(cx.listener(|this, _: &Refresh, _, cx| this.refresh(cx)))
             .on_action(cx.listener(|this, _: &ScanSubnet, _, cx| this.ask_scan(cx)))
-            .on_action(cx.listener(|this, _: &DiscoverTailscale, _, cx| this.discover_tailscale(cx)))
+            .on_action(cx.listener(|this, _: &DiscoverTailscale, _, cx| this.discover_tailscale(true, cx)))
             .on_action(cx.listener(|this, _: &DiscoverAws, window, cx| this.open_aws(window, cx)))
             .on_action(cx.listener(|this, _: &DiscoverWireGuard, _, cx| this.discover_wireguard(cx)))
             .on_action(cx.listener(|this, _: &AddDevice, window, cx| this.open_add_device(window, cx)))
