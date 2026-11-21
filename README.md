@@ -89,6 +89,18 @@ for scripts and AI agents.
   WezTerm, kitty, Alacritty, GNOME Terminal, Konsole, Windows Terminal…)? Pick it in Settings, or
   use *More → SSH in the external terminal app*; Nodo shows the exact command the first time.
 - **Quick actions**: open the web UI, VNC (`vnc://`), copy IP or MAC, Wake-on-LAN.
+- **Send files between computers** (AirDrop-like, macOS / Linux / Windows): drop files or folders
+  on a device in the graph, or *Send file… / Send folder… / Send clipboard text* from its menu, to
+  another computer running Nodo with *Receive files* turned on (off by default; Settings → File
+  sharing). It goes to the Tailscale address when there is one, else the LAN (Nodos also announce
+  themselves as `_nodo._tcp` over mDNS). End-to-end encrypted and authenticated (X25519 + Ed25519
+  + ChaCha20-Poly1305); a new computer is paired once by checking the same 6-digit code on both
+  screens, then its key is pinned. The receiver accepts or declines each transfer (or accepts from
+  paired devices automatically); transfers are chunked, resume after an interruption, show
+  progress with cancel, and are SHA-256 verified. Files land in `~/Downloads/Nodo`, never
+  overwriting, quarantined on macOS; folders arrive as a zip; text goes to the clipboard. Size limit
+  and folder are configurable; a *Transfers* list keeps the history. *Send via Taildrop…* uses
+  `tailscale file cp` for devices on the tailnet.
 - **Export**: the graph as PNG, PDF (vector) or SVG, a Mermaid diagram, the inventory as CSV or
   JSON. **Import** a CSV inventory (any of name / IP / MAC / type / owner / location / tags /
   notes / links; other columns become custom fields).
@@ -104,7 +116,9 @@ tables and listens to the LAN; the active scan runs only when you click it. Tail
 WireGuard are read through their own CLIs. The only request Nodo makes on its own is reading the
 project's GitHub star count (`api.github.com/repos/otherwisetech/nodo-rs`, no login, nothing about
 you or your networks) at most once a day; turn it off in the globe menu or in Settings. On macOS
-the first discovery asks for *Local Network* access.
+the first discovery asks for *Local Network* access. File sharing only listens when you turn
+*Receive files* on, and only sends when you send something; it goes straight to the other
+computer, encrypted.
 
 ## The `nodo` command line
 

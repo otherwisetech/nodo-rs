@@ -556,6 +556,11 @@ impl NodoApp {
                 n.child(div().flex().items_center().gap(s(3.)).px(s(6.)).py(s(1.)).rounded(s(8.)).bg(t.accent).text_color(t.on_fill()).text_size(s(10.)).font_weight(FontWeight::SEMIBOLD).child(ui::kind_svg("pin", 10. * zoom.max(0.7), t.on_fill())).child(me_badge()))
             })
             .when(is_me, |n| n.tooltip(|w, cx| Tooltip::new(i18n::t!("app.me.you_are_here")).build(w, cx)))
+            // drop files or folders on a device to send them to its Nodo
+            .when(!is_me, |n| {
+                let accent = t.accent;
+                n.drag_over::<ExternalPaths>(move |s, _, _, _| s.bg(accent.opacity(0.14)).rounded(px(12.))).on_drop(cx.listener(move |this, paths: &ExternalPaths, _, cx| this.send_paths(id, paths.paths().to_vec(), cx)))
+            })
             .on_click(cx.listener(move |this, ev: &ClickEvent, _, cx| {
                 cx.stop_propagation();
                 this.select_device(id, cx);
@@ -568,7 +573,7 @@ impl NodoApp {
     }
 
     pub(crate) fn device_menu(&self, d: &Device, cx: &mut Context<Self>) -> DeviceMenu {
-        DeviceMenu { weak: cx.entity().downgrade(), id: d.id, has_ip: d.primary_ip().is_some(), has_mac: d.macs().next().is_some(), saved: d.saved, is_me: self.this_computer() == Some(d.id) }
+        DeviceMenu { weak: cx.entity().downgrade(), id: d.id, has_ip: d.primary_ip().is_some(), has_mac: d.macs().next().is_some(), saved: d.saved, is_me: self.this_computer() == Some(d.id), tailnet: d.layers().contains(&Layer::Tailscale) }
     }
 
     fn map_list(&mut self, t: &Tokens, cx: &mut Context<Self>) -> AnyElement {
@@ -691,6 +696,7 @@ pub(crate) struct DeviceMenu {
     has_mac: bool,
     saved: bool,
     is_me: bool,
+    tailnet: bool,
 }
 
 impl DeviceMenu {
@@ -715,6 +721,11 @@ impl DeviceMenu {
             .item(self.item(i18n::t!("app.action.ping"), ip, |this, id, window, cx| this.run_tool(id, nodo_core::tools::Tool::Ping, window, cx)))
             .item(self.item(i18n::t!("app.action.traceroute"), ip, |this, id, window, cx| this.run_tool(id, nodo_core::tools::Tool::Traceroute, window, cx)))
             .item(self.item(i18n::t!("app.action.shell_here"), true, |this, id, window, cx| this.shell_here(id, window, cx)))
+            .separator()
+            .item(self.item(i18n::t!("app.share.send_file"), !self.is_me && ip, |this, id, _, cx| this.send_file_dialog(id, false, cx)))
+            .item(self.item(i18n::t!("app.share.send_folder"), !self.is_me && ip, |this, id, _, cx| this.send_file_dialog(id, true, cx)))
+            .item(self.item(i18n::t!("app.share.send_clipboard"), !self.is_me && ip, |this, id, _, cx| this.send_clipboard(id, cx)))
+            .item(self.item(i18n::t!("app.share.send_taildrop"), !self.is_me && self.tailnet, |this, id, _, cx| this.send_taildrop(id, cx)))
             .separator()
             .item(self.item(if self.saved { i18n::t!("app.action.unsave") } else { i18n::t!("app.action.save") }, true, |this, id, _, cx| this.toggle_saved(id, cx)))
             .item(self.item(i18n::t!("app.action.edit"), true, |this, id, window, cx| this.start_edit(id, window, cx)))

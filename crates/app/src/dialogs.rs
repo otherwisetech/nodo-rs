@@ -35,6 +35,10 @@ pub struct SettingsForm {
     pub term_prefer: crate::terminal::state::Prefer,
     pub term_dock: crate::terminal::state::Dock,
     pub term_font: Entity<InputState>,
+    pub share_receive: bool,
+    pub share_auto: bool,
+    pub share_dir: Entity<InputState>,
+    pub share_max: Entity<InputState>,
 }
 
 pub struct AddForm {
@@ -56,6 +60,10 @@ pub enum Dialog {
     Rename { id: NetworkId, name: Entity<InputState> },
     /// The exact command, shown before running it the first time.
     Launch { launch: crate::launch::Launch, key: String },
+    /// A question from file sharing (pair with a code, accept a file).
+    Ask(crate::share_ui::AskReq),
+    /// Transfers so far.
+    Transfers,
 }
 
 /// Title, body, OK label, danger, ready, OK action.
@@ -107,7 +115,9 @@ impl NodoApp {
         let term_font = mk(format!("{}", s.term_font()), window, cx);
         let term_prefer = crate::terminal::state::Prefer::parse(s.term_prefer.as_deref());
         let term_dock = self.term.layout.dock;
-        self.dialog = Some(Dialog::Settings(SettingsForm { interval, down_minutes, alert_down: cfg.alert_down, alert_new: cfg.alert_new, notify: s.notify(), auto_refresh: s.auto_refresh(), stars: s.github_stars(), terminal: s.terminal.clone(), term_prefer, term_dock, term_font }));
+        let share_dir = mk(s.share_dir().display().to_string(), window, cx);
+        let share_max = mk((s.share_max_bytes() / (1024 * 1024)).to_string(), window, cx);
+        self.dialog = Some(Dialog::Settings(SettingsForm { interval, down_minutes, alert_down: cfg.alert_down, alert_new: cfg.alert_new, notify: s.notify(), auto_refresh: s.auto_refresh(), stars: s.github_stars(), terminal: s.terminal.clone(), term_prefer, term_dock, term_font, share_receive: s.share_receive(), share_auto: s.share_auto(), share_dir, share_max }));
         cx.notify();
     }
 
@@ -129,7 +139,15 @@ impl NodoApp {
             s.terminal = f.terminal.clone();
             s.term_prefer = f.term_prefer.id();
             s.term_font = f.term_font.read(cx).value().trim().replace(',', ".").parse::<f32>().ok().map(|v| format!("{}", v.clamp(crate::terminal::FONT_MIN, crate::terminal::FONT_MAX)));
+            s.share_receive = f.share_receive.then(|| "on".into()); // i18n-ok: setting value
+            s.share_auto = f.share_auto.then(|| "on".into()); // i18n-ok: setting value
+            s.share_dir = Some(f.share_dir.read(cx).value().trim().to_string()).filter(|d| !d.is_empty());
+            s.share_max_mb = f.share_max.read(cx).value().trim().parse::<u64>().ok().filter(|v| *v > 0).map(|v| v.to_string());
         });
+        // a new folder or limit takes a restart of the receiver
+        if let Err(e) = crate::share_ui::restart_receiver() {
+            self.toast(e, cx);
+        }
         if self.term.layout.dock != f.term_dock {
             self.term.layout.dock = f.term_dock;
             let l = self.term.layout.clone();
@@ -395,6 +413,14 @@ impl NodoApp {
                     .child(check("set-auto", i18n::t!("app.settings.auto_refresh"), f.auto_refresh, |f, v| f.auto_refresh = v))
                     .child(check("set-stars", i18n::t!("app.star.setting"), f.stars, |f, v| f.stars = v))
                     .child(hint(i18n::t!("app.star.setting_hint")))
+                    .child(ui::section_title(t, i18n::t!("app.share.section")))
+                    .child(check("set-share", i18n::t!("app.share.receive"), f.share_receive, |f, v| f.share_receive = v))
+                    .child(hint(i18n::t!("app.share.receive_hint")))
+                    .child(check("set-share-auto", i18n::t!("app.share.auto"), f.share_auto, |f, v| f.share_auto = v))
+                    .child(label(i18n::t!("app.share.dir")))
+                    .child(Input::new(&f.share_dir).small())
+                    .child(label(i18n::t!("app.share.max")))
+                    .child(Input::new(&f.share_max).small())
                     .child(ui::section_title(t, i18n::t!("app.settings.term_section")))
                     .child(div().flex().items_center().gap(px(8.)).child(label(i18n::t!("app.settings.term_prefer"))).child({
                         use crate::terminal::state::Prefer;
@@ -522,6 +548,45 @@ impl NodoApp {
                 }
                 b = b.child(div().text_size(px(12.)).text_color(t.ink_muted).child(i18n::t!("app.launch.once")));
                 (i18n::t!("app.launch.title"), b.into_any_element(), i18n::t!("app.launch.ok"), false, true, |this, _, cx| this.confirm_launch(cx))
+            }
+            Dialog::Ask(a) => {
+                use crate::share_ui::Ask;
+                let big = |s: String| div().text_size(px(26.)).font_weight(FontWeight::SEMIBOLD).font_family(crate::theme::MONO).text_color(t.accent).child(s);
+                match &a.ask {
+                    Ask::Pair { code, addr } => (i18n::t!("app.share.pair_title"), div().flex().flex_col().gap(px(10.)).child(text(i18n::t!("app.share.pair_in", addr = addr.to_string()))).child(big(code.clone())).child(text(i18n::t!("app.share.pair_hint"))).into_any_element(), i18n::t!("app.share.pair_ok"), false, true, |this, _, cx| this.answer_ask(true, cx)),
+                    Ask::SendPair { device, code } => (i18n::t!("app.share.pair_title"), div().flex().flex_col().gap(px(10.)).child(text(i18n::t!("app.share.pair_out", device = device.clone()))).child(big(code.clone())).child(text(i18n::t!("app.share.pair_hint"))).into_any_element(), i18n::t!("app.share.pair_ok"), false, true, |this, _, cx| this.answer_ask(true, cx)),
+                    Ask::Offer { from, offer } => {
+                        let what = match offer.kind {
+                            nodo_core::share::transfer::Kind::Text => i18n::t!("app.share.offer_text", from = from.clone(), preview = offer.text.as_deref().unwrap_or_default().chars().take(140).collect::<String>()),
+                            _ => i18n::t!("app.share.offer_file", from = from.clone(), name = nodo_core::share::safe_name(&offer.name), size = crate::share_ui::size_label(offer.size)),
+                        };
+                        let dir = crate::settings::Settings::load().share_dir().display().to_string();
+                        (i18n::t!("app.share.offer_title"), div().flex().flex_col().gap(px(8.)).child(text(what)).when(offer.kind != nodo_core::share::transfer::Kind::Text, |d| d.child(div().text_size(px(11.5)).text_color(t.ink_muted).child(i18n::t!("app.share.offer_dir", dir = dir)))).into_any_element(), i18n::t!("app.share.accept"), false, true, |this, _, cx| this.answer_ask(true, cx))
+                    }
+                }
+            }
+            Dialog::Transfers => {
+                let h = crate::share_ui::history();
+                let mut b = div().flex().flex_col().gap(px(4.));
+                b = b.child(text(if crate::share_ui::receiving() { i18n::t!("app.share.receiving_on", dir = crate::settings::Settings::load().share_dir().display().to_string()) } else { i18n::t!("app.share.receiving_off") }));
+                if h.is_empty() {
+                    b = b.child(text(i18n::t!("app.share.history_empty")));
+                }
+                let now = nodo_core::time::now();
+                for (at, incoming, peer, name, size, state) in h.into_iter().take(60) {
+                    let st = match state.as_str() {
+                        "done" => i18n::t!("app.share.st_done"),
+                        "declined" => i18n::t!("app.share.st_declined"),
+                        "cancelled" => i18n::t!("app.share.st_cancelled"),
+                        _ => i18n::t!("app.share.st_failed"),
+                    };
+                    let dir = if incoming { i18n::t!("app.share.from", peer = peer) } else { i18n::t!("app.share.to", peer = peer) };
+                    b = b.child(div().flex().items_center().gap(px(8.)).text_size(px(12.)).child(div().w(px(16.)).child(if incoming { "↓" } else { "↑" })).child(div().flex_1().min_w_0().truncate().child(format!("{name} · {} · {dir}", crate::share_ui::size_label(size)))).child(div().text_color(t.ink_muted).child(format!("{st} · {}", crate::util::ago(at, now))))); // i18n-ok: arrows, separators
+                }
+                (i18n::t!("app.share.history"), b.into_any_element(), i18n::t!("app.share.open_folder"), false, true, |this, _, cx| {
+                    this.dialog = None;
+                    this.open_downloads(cx);
+                })
             }
         };
         let close = |this: &mut NodoApp, cx: &mut Context<NodoApp>| {

@@ -218,6 +218,7 @@ pub struct NodoApp {
     pub terminals: Rc<Vec<crate::launch::Term>>,
     detected: bool,
     pub recent: Vec<PathBuf>,
+    pub share: crate::share_ui::ShareState,
     _subs: Vec<Subscription>,
 }
 
@@ -259,8 +260,10 @@ impl NodoApp {
             terminals: Rc::new(Vec::new()),
             detected: false,
             recent: nodo_core::paths::recent(),
+            share: Default::default(),
             _subs: subs,
         };
+        this.start_share(cx);
         crate::star::refresh(crate::settings::Settings::load().github_stars(), cx);
         if let Some(p) = initial {
             this.open_path(p, window, cx);
@@ -821,6 +824,7 @@ impl NodoApp {
                         None => this.toast(i18n::t!("app.me.not_found"), cx),
                     }))
             }))
+            .children(self.render_share_footer(t, cx))
             .children(self.render_term_footer(t, cx))
             .children(self.monitor_status(t))
             .child(crate::star::footer_link(t, cx))

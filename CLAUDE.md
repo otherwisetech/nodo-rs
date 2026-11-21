@@ -40,6 +40,12 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
 - **Nothing leaves the computer** except the optional once-a-day star count. AWS goes through the
   user's `aws` CLI (never the SDK, never credentials in Nodo); Tailscale and WireGuard through
   their CLIs. SSDP descriptions are fetched from private addresses only.
+- **File sharing is opt-in and peer-to-peer.** `core/share/` (crypto.rs: handshake + pinned
+  Ed25519 keys + SAS pairing code, all from `ring`; transfer.rs: offer / accept-with-offset /
+  chunks / SHA-256; mod.rs: receiver, mDNS `_nodo._tcp`, zip, unique names, quarantine) and
+  `app/share_ui.rs`. The receiver listens (port 47821) only while *Receive files* is on; every
+  received name goes through `share::safe_name` / `unique_path`; nothing is sent without a user
+  action. Tests run the whole protocol on loopback.
 - **The map file is the user's document.** Every change is written right away (no save step) in
   small transactions; `journal_mode=DELETE` so it can sit in a synced folder. Schema changes are a
   new entry at the end of `db::MIGRATIONS` (never edit a shipped one) plus a test in `db.rs`.

@@ -10,6 +10,7 @@ mod launch;
 mod map_view;
 mod panel;
 mod settings;
+mod share_ui;
 mod star;
 mod terminal;
 mod theme;

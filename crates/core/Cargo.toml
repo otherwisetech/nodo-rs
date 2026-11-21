@@ -19,6 +19,7 @@ flate2 = "1"
 mdns-sd = "0.22"
 # SSDP device descriptions on the LAN (plain http to private addresses only)
 ureq = { version = "3", default-features = false }
+ring = "0.17"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

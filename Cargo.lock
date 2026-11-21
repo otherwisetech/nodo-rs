@@ -4093,6 +4093,7 @@ dependencies = [
  "libc",
  "mdns-sd",
  "nodo-i18n",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",

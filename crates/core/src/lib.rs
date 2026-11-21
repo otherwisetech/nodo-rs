@@ -26,6 +26,7 @@ pub mod probe;
 pub mod remote;
 pub mod render;
 pub mod shell_env;
+pub mod share;
 pub mod time;
 pub mod this_computer;
 pub mod tools;
