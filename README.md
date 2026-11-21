@@ -120,11 +120,13 @@ for scripts and AI agents.
   *Show in Finder* put the file where you want it: the copy is made with SQLite's `VACUUM INTO`,
   checked (`integrity_check`) and reopened before anything else happens, and *Move* deletes the
   original only after that and after you confirm. New maps are offered in the folder you used
-  last (never a temporary folder). Recent maps that were moved or deleted stay in the list,
+  last (never a temporary folder), else in Nodo's folder of the Otherwise data folder
+  (`~/.otherwise/nodo`, or wherever you moved it in Otherwise Apps → Settings). Recent maps that were moved or deleted stay in the list,
   greyed, with *Locate…*; right-click one to remove it, show it or move it.
 - **Cloud-synced folders** (OneDrive, iCloud Drive, Dropbox, Google Drive, Box, anything under
   `~/Library/CloudStorage`) are recognised: the map stays one file in short transactions, a small
-  `.<map>.lock` beside it (computer name + a heartbeat every minute, stale after 5 minutes) shows
+  `<map>.lock.json` beside it (the lock format all Otherwise apps share: computer name + a
+  heartbeat every minute, stale after 5 minutes; 0.2.1's `.<map>.lock` is still read) shows
   *open in Nodo on another computer* instead of letting two computers edit at once, and conflict
   copies the sync client leaves next to the map (`… conflicted copy …`, `… 2.nodo`, `… (1).nodo`,
   OneDrive's `…-ComputerName.nodo`) are offered for review.

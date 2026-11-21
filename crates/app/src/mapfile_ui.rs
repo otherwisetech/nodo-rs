@@ -56,7 +56,7 @@ pub fn reveal_label() -> String {
 }
 
 fn host() -> String {
-    nodo_core::discover::hostname().unwrap_or_default()
+    mapfile::host()
 }
 
 fn with_ext(path: PathBuf) -> PathBuf {
@@ -73,7 +73,7 @@ impl NodoApp {
         if let Some(d) = self.doc.as_ref().and_then(|d| d.store.path().parent()).filter(|d| d.is_dir() && !nodo_core::paths::is_temp(d)) {
             return d.to_path_buf();
         }
-        nodo_core::paths::default_dir(&self.recent, crate::app::documents_dir())
+        nodo_core::paths::default_dir(&self.recent, nodo_core::paths::data_dir())
     }
 
     /// After a map is opened (or reopened from a new place): cloud folder, lock, conflicts.

@@ -1,9 +1,11 @@
 //! Where a map file lives: safe copy / move (`VACUUM INTO`, then integrity check and reopen
 //! before anything is deleted), cloud-sync folders (OneDrive, iCloud Drive, Dropbox, Google
 //! Drive, Box), the small lock file that says "open on another computer", and the conflict
-//! copies sync clients leave next to the map.
+//! copies sync clients leave next to the map. Cloud detection, conflict names and the lock file
+//! format are otherwise-link's (`cloud`, `lock`), shared with every Otherwise app, so Otherwise
+//! Apps sees an open map before it moves the data folder.
 use crate::db::{Store, StoreError};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub enum FileError {
@@ -98,6 +100,7 @@ pub fn remove_map(path: &Path) -> std::io::Result<()> {
     std::fs::remove_file(path)?;
     let _ = std::fs::remove_file(crate::db::journal(path));
     let _ = std::fs::remove_file(lock_path(path));
+    let _ = std::fs::remove_file(legacy_lock_path(path));
     Ok(())
 }
 
@@ -139,39 +142,30 @@ impl Cloud {
     }
 }
 
-fn provider(folder: &str) -> Option<Cloud> {
-    let f = folder.to_lowercase();
-    if f.starts_with("onedrive") {
-        Some(Cloud::OneDrive)
-    } else if f.starts_with("googledrive") || f == "google drive" || f == "my drive" {
-        Some(Cloud::GoogleDrive)
-    } else if f == "dropbox" || f.starts_with("dropbox-") || f.starts_with("dropbox (") {
-        Some(Cloud::Dropbox)
-    } else if f == "icloud drive" || f == "iclouddrive" {
-        Some(Cloud::ICloud)
-    } else if f == "box" || f == "box sync" || f.starts_with("box-") {
-        Some(Cloud::Box)
-    } else {
-        None
+impl From<otherwise_link::cloud::Provider> for Cloud {
+    fn from(p: otherwise_link::cloud::Provider) -> Cloud {
+        use otherwise_link::cloud::Provider as P;
+        match p {
+            P::OneDrive => Cloud::OneDrive,
+            P::ICloud => Cloud::ICloud,
+            P::Dropbox => Cloud::Dropbox,
+            P::GoogleDrive => Cloud::GoogleDrive,
+            P::Box => Cloud::Box,
+            P::Other => Cloud::Other,
+        }
     }
 }
 
-/// Which sync client owns the folder `path` is in, from the path alone (macOS File Provider
-/// folders under `~/Library/CloudStorage`, iCloud's `Mobile Documents`, and the classic
-/// `~/Dropbox`, `~/OneDrive - Company`, `C:\Users\x\iCloudDrive`, … folders).
+/// Which sync client owns the folder `path` is in ([`otherwise_link::cloud::detect`]: macOS
+/// File Provider folders, iCloud's `Mobile Documents`, `~/Dropbox`, `~/OneDrive - Company`,
+/// `%OneDrive%`, Google Drive's `My Drive`…).
 pub fn cloud_of(path: &Path) -> Option<Cloud> {
-    let parts: Vec<String> = path.components().filter_map(|c| if let Component::Normal(s) = c { Some(s.to_string_lossy().into_owned()) } else { None }).collect();
-    // the file name itself never counts, only folders
-    let folders = &parts[..parts.len().saturating_sub(1)];
-    for (i, p) in folders.iter().enumerate() {
-        if p == "CloudStorage" && i > 0 && folders[i - 1] == "Library" {
-            return Some(folders.get(i + 1).and_then(|f| provider(f)).unwrap_or(Cloud::Other));
-        }
-        if p == "Mobile Documents" && i > 0 && folders[i - 1] == "Library" {
-            return Some(Cloud::ICloud);
-        }
-    }
-    folders.iter().find_map(|p| provider(p))
+    otherwise_link::cloud::detect(path).map(|c| c.provider.into())
+}
+
+/// [`cloud_of`] judged against a given home folder (tests).
+pub fn cloud_in(path: &Path, home: &Path) -> Option<Cloud> {
+    otherwise_link::cloud::detect_in(path, home, &[]).map(|c| c.provider.into())
 }
 
 // ── "open on another computer" ───────────────────────────────────────────────────────────────
@@ -200,13 +194,36 @@ pub enum LockState {
     Elsewhere(LockInfo),
 }
 
-/// `.Home network.nodo.lock` next to the map, so it syncs with it.
+/// This computer's name as every Otherwise app writes it into locks.
+pub fn host() -> String {
+    otherwise_link::lock::host_name().to_string()
+}
+
+/// `Home network.nodo.lock.json` next to the map (otherwise-link's lock file), so it syncs with
+/// it.
 pub fn lock_path(map: &Path) -> PathBuf {
+    otherwise_link::lock::lock_path(map)
+}
+
+/// Nodo 0.2.1's own lock, `.Home network.nodo.lock`: still read, so a computer that hasn't
+/// updated yet is seen.
+fn legacy_lock_path(map: &Path) -> PathBuf {
     sibling(map, format!(".{}.lock", file_name(map)))
 }
 
 pub fn read_lock(map: &Path) -> Option<LockInfo> {
-    serde_json::from_str(&std::fs::read_to_string(lock_path(map)).ok()?).ok()
+    let new = otherwise_link::lock::read(map).map(|i| LockInfo { host: i.host, pid: i.pid, started: i.since, heartbeat: i.heartbeat });
+    let old = std::fs::read_to_string(legacy_lock_path(map)).ok().and_then(|s| serde_json::from_str::<LockInfo>(&s).ok()).map(|mut l| {
+        // 0.2.1 named this computer by its network host name
+        if crate::discover::hostname().is_some_and(|h| h.eq_ignore_ascii_case(&l.host)) {
+            l.host = host();
+        }
+        l
+    });
+    match (new, old) {
+        (Some(a), Some(b)) => Some(if b.heartbeat > a.heartbeat { b } else { a }),
+        (a, b) => a.or(b),
+    }
 }
 
 pub fn assess(lock: Option<&LockInfo>, host: &str, now: i64) -> LockState {
@@ -222,34 +239,30 @@ pub fn assess(lock: Option<&LockInfo>, host: &str, now: i64) -> LockState {
 /// ours.
 #[derive(Debug)]
 pub struct MapLock {
+    map: PathBuf,
     path: PathBuf,
     pub info: LockInfo,
-}
-
-fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
-    let tmp = sibling(path, format!("{}.tmp", file_name(path)));
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, path)
 }
 
 impl MapLock {
     /// Take the lock (after the caller has looked at [`assess`] and decided to go ahead).
     pub fn take(map: &Path, host: &str, now: i64) -> std::io::Result<MapLock> {
         let info = LockInfo { host: host.to_string(), pid: std::process::id(), started: now, heartbeat: now };
-        let l = MapLock { path: lock_path(map), info };
+        let l = MapLock { map: map.to_path_buf(), path: lock_path(map), info };
         l.write()?;
+        let _ = std::fs::remove_file(legacy_lock_path(map));
         Ok(l)
     }
 
     fn write(&self) -> std::io::Result<()> {
-        write_atomic(&self.path, &serde_json::to_string(&self.info).unwrap_or_default())
+        let i = otherwise_link::lock::LockInfo { app: "nodo".into(), host: self.info.host.clone(), pid: self.info.pid, scope: otherwise_link::lock::Scope::Process, since: self.info.started, heartbeat: self.info.heartbeat, ..Default::default() }; // i18n-ok: app id
+        otherwise_link::fsutil::write_atomic(&self.path, (serde_json::to_string_pretty(&i).unwrap_or_default() + "\n").as_bytes())
     }
 
     /// Refresh the heartbeat. If another computer took the map over meanwhile its lock is left
     /// alone and returned.
     pub fn beat(&mut self, now: i64) -> std::io::Result<LockState> {
-        let on_disk = serde_json::from_str::<LockInfo>(&std::fs::read_to_string(&self.path).unwrap_or_default()).ok();
-        let state = assess(on_disk.as_ref(), &self.info.host, now);
+        let state = assess(read_lock(&self.map).as_ref(), &self.info.host, now);
         if let LockState::Elsewhere(_) = state {
             return Ok(state);
         }
@@ -265,7 +278,7 @@ impl MapLock {
 
 impl Drop for MapLock {
     fn drop(&mut self) {
-        let ours = std::fs::read_to_string(&self.path).ok().and_then(|s| serde_json::from_str::<LockInfo>(&s).ok()).is_some_and(|l| l.host == self.info.host && l.pid == self.info.pid);
+        let ours = otherwise_link::lock::read(&self.map).is_some_and(|l| l.host == self.info.host && l.pid == self.info.pid);
         if ours {
             let _ = std::fs::remove_file(&self.path);
         }
@@ -274,40 +287,13 @@ impl Drop for MapLock {
 
 // ── conflict copies ──────────────────────────────────────────────────────────────────────────
 
-fn split_ext(name: &str) -> (&str, &str) {
-    match name.rfind('.') {
-        Some(i) if i > 0 => (&name[..i], &name[i + 1..]),
-        _ => (name, ""),
-    }
-}
-
 /// Whether `candidate` looks like a sync client's conflict copy of the map named `map`:
 /// Dropbox `Home network (Juan's conflicted copy 2026-11-20).nodo`, Syncthing
 /// `Home network.sync-conflict-….nodo`, iCloud `Home network 2.nodo`, Google Drive
 /// `Home network (1).nodo`, OneDrive `Home network-MacBook-Pro.nodo` (only checked when the
-/// map is in OneDrive, as `-something` is also an ordinary name).
+/// map is in OneDrive, as `-something` is also an ordinary name). otherwise-link's rules.
 pub fn is_conflict_copy(map: &str, candidate: &str, onedrive: bool) -> bool {
-    let (stem, ext) = split_ext(map);
-    let (cstem, cext) = split_ext(candidate);
-    if candidate.starts_with('.') || !cext.eq_ignore_ascii_case(ext) || cstem == stem || !cstem.starts_with(stem) {
-        return false;
-    }
-    let rest = &cstem[stem.len()..];
-    if rest.to_lowercase().contains("conflict") {
-        return true;
-    }
-    let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
-    if let Some(n) = rest.strip_prefix(" (").and_then(|r| r.strip_suffix(')'))
-        && digits(n)
-    {
-        return true;
-    }
-    if let Some(n) = rest.strip_prefix(' ')
-        && digits(n)
-    {
-        return true;
-    }
-    onedrive && rest.len() > 1 && rest.starts_with('-') && rest[1..].chars().all(|c| c.is_alphanumeric() || c == '-')
+    otherwise_link::cloud::is_conflict_name(map, candidate, onedrive.then_some(otherwise_link::cloud::Provider::OneDrive))
 }
 
 /// Conflict copies of `map` in its folder, sorted by name.
@@ -394,7 +380,13 @@ mod tests {
 
     #[test]
     fn cloud_folders() {
-        let c = |s: &str| cloud_of(Path::new(s));
+        let c = |s: &str| {
+            let p = Path::new(s);
+            let parts: Vec<_> = p.components().collect();
+            let i = parts.iter().position(|c| matches!(c.as_os_str().to_str(), Some("Users" | "home"))).unwrap_or(parts.len());
+            let home: PathBuf = parts.iter().take(i + 2).collect();
+            cloud_in(p, &home).or_else(|| cloud_in(p, Path::new("/nobody")))
+        };
         assert_eq!(c("/Users/juan/Library/CloudStorage/OneDrive-Personal/Maps/Home.nodo"), Some(Cloud::OneDrive));
         assert_eq!(c("/Users/juan/Library/CloudStorage/OneDrive-OtherwiseTechnologies/Home.nodo"), Some(Cloud::OneDrive));
         assert_eq!(c("/Users/juan/Library/CloudStorage/GoogleDrive-juan@example.com/My Drive/Home.nodo"), Some(Cloud::GoogleDrive));
@@ -419,7 +411,9 @@ mod tests {
         let map = dir.path().join("Home network.nodo");
         assert_eq!(assess(read_lock(&map).as_ref(), "laptop", 0), LockState::Free);
         let mut mine = MapLock::take(&map, "laptop", 1000).unwrap();
-        assert_eq!(mine.path(), dir.path().join(".Home network.nodo.lock"));
+        assert_eq!(mine.path(), dir.path().join("Home network.nodo.lock.json"));
+        // the shared format: Otherwise Apps sees it as "open in Nodo"
+        assert_eq!(otherwise_link::lock::read(&map).unwrap().app, "nodo");
         assert!(matches!(assess(read_lock(&map).as_ref(), "laptop", 1010), LockState::Ours(_)));
         assert!(matches!(assess(read_lock(&map).as_ref(), "studio", 1010), LockState::Elsewhere(l) if l.host == "laptop"));
         // heartbeat moves forward, so it never goes stale while open
@@ -430,7 +424,13 @@ mod tests {
         assert!(matches!(assess(read_lock(&map).as_ref(), "studio", 1000 + 3 * STALE_SECS), LockState::Stale(_)));
         // another computer took it over: our heartbeat leaves its lock alone
         let theirs = LockInfo { host: "studio".into(), pid: 7, started: 5000, heartbeat: 5000 };
-        std::fs::write(lock_path(&map), serde_json::to_string(&theirs).unwrap()).unwrap();
+        // a computer still on 0.2.1 writes the old lock file
+        std::fs::write(legacy_lock_path(&map), serde_json::to_string(&theirs).unwrap()).unwrap();
+        assert!(matches!(mine.beat(5010).unwrap(), LockState::Elsewhere(_)));
+        assert_eq!(read_lock(&map).unwrap(), theirs);
+        std::fs::remove_file(legacy_lock_path(&map)).unwrap();
+        let shared = otherwise_link::lock::LockInfo { app: "nodo".into(), host: "studio".into(), pid: 7, since: 5000, heartbeat: 5000, ..Default::default() };
+        std::fs::write(lock_path(&map), serde_json::to_string(&shared).unwrap()).unwrap();
         assert!(matches!(mine.beat(5010).unwrap(), LockState::Elsewhere(_)));
         assert_eq!(read_lock(&map).unwrap(), theirs);
         // dropping ours doesn't remove theirs
