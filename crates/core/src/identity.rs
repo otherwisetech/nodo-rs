@@ -135,6 +135,9 @@ pub fn ingest(map: &mut MapData, d: &Discovery, now: i64) -> IngestReport {
     for o in &d.devices {
         ingest_one(map, o, now, &mut rep);
     }
+    let (devs, nets) = reclassify(map);
+    rep.updated.extend(devs);
+    rep.networks.extend(nets);
     rep.updated.retain(|id| !rep.new.contains(id));
     rep.updated.sort();
     rep.updated.dedup();
@@ -178,7 +181,9 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
         let own = o.network.as_deref().and_then(|k| map.network_by_key(k));
         match own {
             Some(n) if n.cidr.as_deref().and_then(crate::cidr::Cidr::parse).is_none_or(|c| c.contains(ip)) => Some(n.id),
-            _ => map.network_for(ip, layer).or(own.map(|n| n.id)),
+            // an IPv4 outside the source's IPv4 subnet is elsewhere (a VM bridge): `reclassify`
+            // finds its subnet; an IPv6 on a network known by its IPv4 prefix stays with it
+            _ => map.network_for(ip, layer).or(own.filter(|n| n.cidr.as_deref().and_then(crate::cidr::Cidr::parse).is_some_and(|c| c.addr.is_ipv4() != ip.is_ipv4())).map(|n| n.id)),
         }
     };
     let found = find(&map.devices, o);
@@ -314,6 +319,91 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
 }
 
 /// "Synology 192.168.1.10", or the address alone.
+pub const INTERNET_KEY: &str = "internet";
+
+/// What the addresses themselves say, over what the source assumed: an address recorded on the
+/// LAN that is a tailnet address moves to the Tailscale layer, a public one the user typed or
+/// imported moves to the Internet layer (a neighbour-table or mDNS sighting is on-link, so a
+/// public address seen there stays local), and a private IPv4 outside every known LAN subnet
+/// gets its own subnet (a VM or container bridge is not the home LAN). Returns the devices and
+/// networks it changed. Idempotent; runs after each discovery and when a map is opened.
+pub fn reclassify(map: &mut MapData) -> (Vec<DeviceId>, Vec<NetworkId>) {
+    use crate::cidr::{AddrClass, Cidr, classify};
+    let mut devs = Vec::new();
+    let mut nets = Vec::new();
+    for i in 0..map.devices.len() {
+        let mut changed = false;
+        for k in 0..map.devices[i].addrs.len() {
+            let a = map.devices[i].addrs[k].clone();
+            if a.layer != Layer::Lan {
+                continue;
+            }
+            let typed = matches!(a.source, Source::Manual | Source::Import);
+            let (layer, network) = match classify(a.ip) {
+                AddrClass::Tailnet => (Layer::Tailscale, map.network_for(a.ip, Layer::Tailscale)),
+                AddrClass::Public if typed => (Layer::Internet, Some(internet_network(map, &mut nets))),
+                _ => {
+                    let fits = a.network.and_then(|n| map.network(n)).is_some_and(|n| n.layer == Layer::Lan && n.cidr.as_deref().and_then(Cidr::parse).is_none_or(|c| c.contains(a.ip) || c.addr.is_ipv4() != a.ip.is_ipv4()));
+                    // no subnet to guess (IPv6, link-local): leave it where the source put it
+                    let net = if fits { a.network } else { map.network_for(a.ip, Layer::Lan).or_else(|| subnet_network(map, a.ip, &mut nets)).or(a.network) };
+                    (Layer::Lan, net)
+                }
+            };
+            if layer != a.layer || network != a.network {
+                let x = &mut map.devices[i].addrs[k];
+                x.layer = layer;
+                x.network = network;
+                changed = true;
+            }
+        }
+        if changed {
+            let d = &mut map.devices[i];
+            let mut seen = Vec::new();
+            d.addrs.retain(|a| {
+                let k = (a.ip, a.layer);
+                let fresh = !seen.contains(&k);
+                seen.push(k);
+                fresh
+            });
+            devs.push(d.id);
+        }
+    }
+    (devs, nets)
+}
+
+fn internet_network(map: &mut MapData, created: &mut Vec<NetworkId>) -> NetworkId {
+    if let Some(n) = map.network_by_key(INTERNET_KEY) {
+        return n.id;
+    }
+    let id = map.next_network_id();
+    map.networks.push(Network { id, name: i18n::t!("core.net.internet"), layer: Layer::Internet, cidr: None, gateway: None, parent: None, key: INTERNET_KEY.into(), facts: Vec::new() });
+    created.push(id);
+    id
+}
+
+/// The private IPv4 subnet `ip` is in when no known LAN network holds it: a known VM bridge, else
+/// its /24. Not for link-local or IPv6 (no subnet to guess).
+fn subnet_network(map: &mut MapData, ip: IpAddr, created: &mut Vec<NetworkId>) -> Option<NetworkId> {
+    let IpAddr::V4(v4) = ip else { return None };
+    if !v4.is_private() {
+        return None;
+    }
+    let bridge = crate::cidr::vm_bridge(ip);
+    let cidr = bridge.unwrap_or_else(|| crate::cidr::Cidr::v4(v4, 24)).to_string();
+    let key = format!("lan:{cidr}");
+    if let Some(n) = map.network_by_key(&key) {
+        return Some(n.id);
+    }
+    let id = map.next_network_id();
+    let (name, facts) = match bridge {
+        Some(_) => (i18n::t!("core.net.vm_bridge", cidr = cidr.clone()), vec![("bridge".to_string(), "vm".to_string())]),
+        None => (cidr.clone(), Vec::new()),
+    };
+    map.networks.push(Network { id, name, layer: Layer::Lan, cidr: Some(cidr), gateway: None, parent: None, key, facts });
+    created.push(id);
+    Some(id)
+}
+
 pub fn fallback_name(d: &Device) -> String {
     let ip = d.primary_ip().map(|i| i.to_string()).unwrap_or_default();
     match d.vendor.as_deref().map(crate::mac::short_vendor) {
@@ -430,6 +520,64 @@ mod tests {
 
     fn lan_net() -> NetworkObservation {
         NetworkObservation { key: "lan:192.168.1.0/24".into(), name: "192.168.1.0/24".into(), layer: Some(Layer::Lan), cidr: Some("192.168.1.0/24".into()), gateway: Some("192.168.1.1".parse().unwrap()), ..Default::default() }
+    }
+
+    #[test]
+    fn addresses_are_placed_by_what_they_are() {
+        let mut m = MapData::default();
+        let mut on_lan = arp("192.168.1.30", "aa:00:00:00:00:01");
+        on_lan.network = Some("lan:192.168.1.0/24".into());
+        // ARP from the host's VM bridge, tagged with the home LAN by the runner
+        let mut vm = arp("192.168.64.3", "aa:00:00:00:00:02");
+        vm.network = Some("lan:192.168.1.0/24".into());
+        let other = arp("10.9.8.7", "aa:00:00:00:00:03");
+        let mut typed = Observation::new(Layer::Lan, Source::Manual);
+        typed.name = Some("KVM 8".into());
+        typed.ips.push("2.24.118.14".parse().unwrap());
+        let mut cgnat = Observation::new(Layer::Lan, Source::Import);
+        cgnat.ips.push("100.79.32.16".parse().unwrap());
+        // a public address in the neighbour table is on-link: it stays on the LAN
+        let onlink = arp("203.0.113.5", "aa:00:00:00:00:04");
+        ingest(&mut m, &Discovery { networks: vec![lan_net()], devices: vec![on_lan, vm, other, typed, cgnat, onlink], notes: vec![] }, 100);
+        fn addr(m: &MapData, ip: &str) -> Addr {
+            m.devices.iter().flat_map(|d| &d.addrs).find(|a| a.ip == ip.parse::<IpAddr>().unwrap()).cloned().unwrap()
+        }
+        fn net(m: &MapData, ip: &str) -> Option<(Layer, String, String)> {
+            addr(m, ip).network.and_then(|n| m.network(n)).map(|n| (n.layer, n.key.clone(), n.name.clone()))
+        }
+        assert_eq!(net(&m, "192.168.1.30").unwrap().1, "lan:192.168.1.0/24");
+        let (l, key, name) = net(&m, "192.168.64.3").unwrap();
+        assert_eq!((l, key.as_str()), (Layer::Lan, "lan:192.168.64.0/24"), "its own subnet, not the home LAN");
+        assert!(name.contains("192.168.64.0/24"));
+        assert_eq!(m.network_by_key("lan:192.168.64.0/24").unwrap().facts, vec![("bridge".to_string(), "vm".to_string())]);
+        assert_eq!(net(&m, "10.9.8.7").unwrap().1, "lan:10.9.8.0/24", "an unknown private subnet gets its /24");
+        assert_eq!(addr(&m, "2.24.118.14").layer, Layer::Internet);
+        assert_eq!(net(&m, "2.24.118.14").unwrap().1, INTERNET_KEY);
+        assert_eq!(addr(&m, "100.79.32.16").layer, Layer::Tailscale);
+        assert_eq!(addr(&m, "203.0.113.5").layer, Layer::Lan);
+        // idempotent, and the next refresh doesn't move the VM back onto the LAN
+        assert_eq!(reclassify(&mut m), (vec![], vec![]));
+        let mut again = arp("192.168.64.3", "aa:00:00:00:00:02");
+        again.network = Some("lan:192.168.1.0/24".into());
+        let r = ingest(&mut m, &Discovery { devices: vec![again], ..Default::default() }, 200);
+        assert!(r.networks.is_empty());
+        assert_eq!(net(&m, "192.168.64.3").unwrap().1, "lan:192.168.64.0/24");
+    }
+
+    #[test]
+    fn maps_from_before_are_fixed() {
+        // what older versions wrote: everything on the LAN network
+        let mut m = MapData::default();
+        m.networks.push(Network { id: 1, name: "home".into(), layer: Layer::Lan, cidr: Some("192.168.40.0/24".into()), gateway: Some("192.168.40.1".parse().unwrap()), parent: None, key: "lan:192.168.40.0/24".into(), facts: vec![] });
+        let addr = |ip: &str, net: Option<NetworkId>, source: Source| Addr { ip: ip.parse().unwrap(), layer: Layer::Lan, network: net, source, last_seen: 0 };
+        m.devices.push(Device { id: 1, name: "KVM 8".into(), saved: true, addrs: vec![addr("2.24.118.14", None, Source::Manual)], ..Default::default() });
+        m.devices.push(Device { id: 2, name: "vm".into(), addrs: vec![addr("192.168.64.3", Some(1), Source::Arp)], ..Default::default() });
+        m.devices.push(Device { id: 3, name: "tv".into(), addrs: vec![addr("192.168.40.20", Some(1), Source::Arp), addr("fe80::1", Some(1), Source::Arp), addr("fd00::20", Some(1), Source::Mdns)], ..Default::default() });
+        let (devs, nets) = reclassify(&mut m);
+        assert_eq!(devs, vec![1, 2]);
+        assert_eq!(nets.len(), 2, "internet and the VM bridge");
+        assert_eq!(m.devices[0].layers(), vec![Layer::Internet]);
+        assert_eq!(m.devices[2].addrs.iter().map(|a| a.network).collect::<Vec<_>>(), vec![Some(1); 3], "IPv6 and link-local stay with the LAN they were seen on");
     }
 
     #[test]

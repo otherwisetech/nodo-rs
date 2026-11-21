@@ -27,3 +27,6 @@ core.layer.lan = LAN
 core.layer.tailscale = Tailscale
 core.layer.aws = AWS
 core.layer.wireguard = WireGuard
+core.layer.internet = Internet
+core.net.internet = Internet / remote
+core.net.vm_bridge = Virtual machines {cidr}

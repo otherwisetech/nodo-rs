@@ -358,7 +358,7 @@ impl NodoApp {
         }
         s = s.child(kv(i18n::t!("app.net.devices"), devices.to_string()));
         for (k, v) in &n.facts {
-            if !v.is_empty() {
+            if !v.is_empty() && k != "bridge" {
                 s = s.child(kv(k.replace('_', " "), v.clone()));
             }
         }

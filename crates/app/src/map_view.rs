@@ -293,7 +293,9 @@ impl NodoApp {
                 _ => false,
             };
             let color = n.layer.map(|l| t.layer(l)).unwrap_or(t.border_strong);
-            edges.push((c.placed.pos[p], c.placed.pos[i], color, false, offline || !matches[i]));
+            // the internet is not a cable from the router: dashed
+            let remote = n.layer == Some(Layer::Internet) && matches!(n.node, NodeRef::Network(_));
+            edges.push((c.placed.pos[p], c.placed.pos[i], color, remote, offline || !matches[i]));
         }
         for (d, h, l) in &c.graph.overlay {
             edges.push((c.placed.pos[*d], c.placed.pos[*h], t.layer(*l), true, !matches[*d]));
@@ -459,6 +461,7 @@ impl NodoApp {
             Layer::Tailscale => "tailscale",
             Layer::Aws => "aws",
             Layer::WireGuard => "wireguard",
+            Layer::Internet => "internet",
         };
         div()
             .id(("hub", i))

@@ -153,7 +153,7 @@ fn kind_icon(file: &str) -> Option<&'static [u8]> {
             }
         };
     }
-    icons!("router", "switch", "ap", "server", "nas", "camera", "printer", "tv", "speaker", "phone", "tablet", "laptop", "desktop", "iot", "vm", "vpn", "unknown", "root", "lan", "tailscale", "aws", "wireguard")
+    icons!("router", "switch", "ap", "server", "nas", "camera", "printer", "tv", "speaker", "phone", "tablet", "laptop", "desktop", "iot", "vm", "vpn", "unknown", "root", "lan", "tailscale", "aws", "wireguard", "internet")
 }
 
 pub(crate) const LOGO_SVG: &str = "icons/nodo-logo.svg";

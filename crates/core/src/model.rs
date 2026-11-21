@@ -14,10 +14,12 @@ pub enum Layer {
     Tailscale,
     Aws,
     WireGuard,
+    /// Public addresses reached over the internet (a VPS, a remote server).
+    Internet,
 }
 
 impl Layer {
-    pub const ALL: [Layer; 4] = [Layer::Lan, Layer::Tailscale, Layer::Aws, Layer::WireGuard];
+    pub const ALL: [Layer; 5] = [Layer::Lan, Layer::Tailscale, Layer::Aws, Layer::WireGuard, Layer::Internet];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -25,6 +27,7 @@ impl Layer {
             Layer::Tailscale => "tailscale",
             Layer::Aws => "aws",
             Layer::WireGuard => "wireguard",
+            Layer::Internet => "internet",
         }
     }
 

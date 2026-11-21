@@ -14,6 +14,7 @@ pub fn layer_color(l: Layer) -> Rgb {
         Layer::Tailscale => (0x8E, 0x5B, 0xE0),
         Layer::Aws => (0xF0, 0x9A, 0x20),
         Layer::WireGuard => (0xE5, 0x48, 0x4D),
+        Layer::Internet => (0x5B, 0x8A, 0x72),
     }
 }
 
@@ -97,7 +98,7 @@ pub fn scene(map: &MapData, g: &Graph, p: &Placed, title: &str, online: &dyn Fn(
         if let Some(par) = n.parent {
             let hub_link = !matches!(n.node, NodeRef::Device(_)) || g.nodes.iter().any(|c| c.parent == Some(i));
             if p.leaf_edges || hub_link {
-                s.edges.push(SceneEdge { a: p.pos[par], b: p.pos[i], color: n.layer.map(layer_color).unwrap_or(NEUTRAL), dashed: false });
+                s.edges.push(SceneEdge { a: p.pos[par], b: p.pos[i], color: n.layer.map(layer_color).unwrap_or(NEUTRAL), dashed: n.layer == Some(Layer::Internet) && matches!(n.node, NodeRef::Network(_)) });
             }
         }
     }
@@ -129,6 +130,7 @@ pub fn layer_name(l: Layer) -> String {
         Layer::Tailscale => i18n::t!("core.layer.tailscale"),
         Layer::Aws => i18n::t!("core.layer.aws"),
         Layer::WireGuard => i18n::t!("core.layer.wireguard"),
+        Layer::Internet => i18n::t!("core.layer.internet"),
     }
 }
 
@@ -138,6 +140,7 @@ fn layer_glyph(l: Layer) -> &'static str {
         Layer::Tailscale => "TS",
         Layer::Aws => "AWS",
         Layer::WireGuard => "WG",
+        Layer::Internet => "NET",
     }
 }
 

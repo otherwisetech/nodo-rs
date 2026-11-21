@@ -30,11 +30,25 @@ impl Doc {
     pub fn open(path: &Path) -> Result<Doc> {
         let store = Store::open(path)?;
         let data = store.load()?;
-        Ok(Doc { store, data })
+        let mut doc = Doc { store, data };
+        // maps written before addresses were classified by what they are
+        let (devs, nets) = identity::reclassify(&mut doc.data);
+        doc.save_networks(&nets)?;
+        doc.save_ids(&devs)?;
+        Ok(doc)
     }
 
     pub fn title(&self) -> String {
         self.store.path().file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+    }
+
+    fn save_networks(&mut self, ids: &[NetworkId]) -> Result<()> {
+        for id in ids {
+            if let Some(n) = self.data.network(*id).cloned() {
+                self.store.save_network(&n)?;
+            }
+        }
+        Ok(())
     }
 
     fn save_ids(&mut self, ids: &[DeviceId]) -> Result<()> {
@@ -82,13 +96,16 @@ impl Doc {
         let id = self.data.next_device_id();
         let mut d = Device { id, name: name.to_string(), name_manual: !name.is_empty(), kind, kind_manual: kind != DeviceKind::Unknown, saved: true, monitor: true, first_seen: now, ..Default::default() };
         if let Some(ip) = ip {
-            let layer = if crate::cidr::is_cgnat(ip) { Layer::Tailscale } else { Layer::Lan };
-            d.addrs.push(Addr { ip, layer, network: self.data.network_for(ip, layer), source: Source::Manual, last_seen: 0 });
+            d.addrs.push(Addr { ip, layer: Layer::Lan, network: self.data.network_for(ip, Layer::Lan), source: Source::Manual, last_seen: 0 });
         }
         if d.name.is_empty() {
             d.name = identity::fallback_name(&d);
         }
-        self.data.devices.push(d.clone());
+        self.data.devices.push(d);
+        // its layer comes from the address: tailnet, internet or a LAN subnet
+        let (_, nets) = identity::reclassify(&mut self.data);
+        self.save_networks(&nets)?;
+        let d = self.data.device(id).cloned().unwrap_or_default();
         self.store.save_device(&d)?;
         self.store.add_event(Some(id), now, EventKind::Edited, "")?;
         Ok(id)
@@ -222,7 +239,8 @@ mod tests {
         drop(doc);
         let doc = Doc::open(&path).unwrap();
         assert_eq!(doc.data.devices.len(), 4);
-        assert_eq!(doc.data.networks.len(), 1);
+        assert_eq!(doc.data.networks.len(), 2, "the tailnet, and the subnet the typed addresses are in");
+        assert!(doc.data.network_by_key("lan:192.168.1.0/24").is_some());
         let merged = doc.data.device(sw.id).unwrap();
         assert!(merged.ident(IdentKind::TailscaleNode).is_some());
         let ev = doc.store.events(Some(sw.id), 10).unwrap();

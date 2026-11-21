@@ -103,7 +103,12 @@ pub fn build(map: &MapData, opts: &GraphOpts) -> Graph {
         let me = g.nodes.len();
         g.nodes.push(GNode { node: NodeRef::Device(d.id), parent: Some(parent), layer: first.map(|a| a.layer), key: format!("1{}{:010}", d.name.to_lowercase(), d.id) });
         let mut linked = vec![parent];
+        let elsewhere = addrs.iter().any(|x| matches!(x.layer, Layer::Tailscale | Layer::Aws | Layer::WireGuard));
         for a in addrs.iter().skip(1) {
+            // reachable over a tunnel: no second line out to the internet
+            if a.layer == Layer::Internet && elsewhere {
+                continue;
+            }
             let h = hub_for(&g, a.network);
             if !linked.contains(&h) {
                 linked.push(h);
@@ -131,6 +136,31 @@ pub(crate) mod tests {
             Device { id: 5, name: "old nas".into(), saved: true, ..Default::default() },
         ];
         MapData { networks, devices }
+    }
+
+    #[test]
+    fn internet_hangs_off_the_centre_and_tunnels_win() {
+        let net = |id, key: &str, layer, cidr: Option<&str>| Network { id, name: key.into(), layer, cidr: cidr.map(str::to_string), gateway: None, parent: None, key: key.into(), facts: vec![] };
+        let addr = |ip: &str, layer, n| Addr { ip: ip.parse().unwrap(), layer, network: Some(n), source: Source::Manual, last_seen: 0 };
+        let mut lan = net(1, "lan", Layer::Lan, Some("192.168.1.0/24"));
+        lan.gateway = Some("192.168.1.1".parse().unwrap());
+        let map = MapData {
+            networks: vec![lan, net(2, "tailnet", Layer::Tailscale, Some("100.64.0.0/10")), net(3, "internet", Layer::Internet, None)],
+            devices: vec![
+                Device { id: 1, name: "router".into(), addrs: vec![addr("192.168.1.1", Layer::Lan, 1)], ..Default::default() },
+                Device { id: 2, name: "vps".into(), addrs: vec![addr("2.24.118.14", Layer::Internet, 3)], ..Default::default() },
+                Device { id: 3, name: "kvm4".into(), addrs: vec![addr("100.79.32.16", Layer::Tailscale, 2), addr("5.6.7.8", Layer::Internet, 3)], ..Default::default() },
+            ],
+        };
+        let g = build(&map, &GraphOpts::default());
+        let hub = g.index_of(NodeRef::Network(3)).unwrap();
+        assert_eq!(g.nodes[hub].parent, Some(0), "the internet hub hangs off the gateway");
+        assert_eq!(g.nodes[hub].layer, Some(Layer::Internet));
+        let vps = g.index_of(NodeRef::Device(2)).unwrap();
+        assert_eq!(g.nodes[vps].parent, Some(hub));
+        let kvm = g.index_of(NodeRef::Device(3)).unwrap();
+        assert_eq!(g.nodes[kvm].parent, g.index_of(NodeRef::Network(2)), "on the tailnet: under the tailnet");
+        assert!(!g.overlay.iter().any(|(d, _, _)| *d == kvm), "and no line out to the internet");
     }
 
     #[test]
