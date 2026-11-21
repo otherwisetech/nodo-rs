@@ -11,7 +11,7 @@ pub mod ssdp;
 pub mod tailscale;
 pub mod wireguard;
 
-use crate::model::{Discovery, IdentKind, Layer, NetworkObservation, Observation, Source};
+use crate::model::{Discovery, Layer, NetworkObservation, Source};
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,25 +31,14 @@ impl Default for Passive {
     }
 }
 
+fn lan_network(net: &netinfo::LocalNet) -> NetworkObservation {
+    NetworkObservation { key: net.key(), name: net.cidr().to_string(), layer: Some(Layer::Lan), cidr: Some(net.cidr().to_string()), gateway: net.gateway.map(IpAddr::V4), facts: vec![("interface".into(), net.iface.clone())], ..Default::default() }
+}
+
 /// The LAN network and this computer, from [`netinfo::detect`].
 pub fn local(net: &netinfo::LocalNet) -> Discovery {
-    let mut d = Discovery::default();
-    d.networks.push(NetworkObservation { key: net.key(), name: net.cidr().to_string(), layer: Some(Layer::Lan), cidr: Some(net.cidr().to_string()), gateway: net.gateway.map(IpAddr::V4), facts: vec![("interface".into(), net.iface.clone())], ..Default::default() });
-    let mut me = Observation::new(Layer::Lan, Source::Arp);
-    me.ips.push(IpAddr::V4(net.ip));
-    if let Some(m) = &net.mac {
-        me = me.ident(IdentKind::Mac, m);
-        me.vendor = crate::mac::vendor(m).map(str::to_string);
-    }
-    let host = hostname();
-    if let Some(h) = &host {
-        me = me.ident(IdentKind::Host, h);
-        me.name = Some(crate::model::host_label(h));
-    }
-    me.online = Some(true);
-    me.facts.push(("this_computer".into(), "1".into()));
-    d.devices.push(me);
-    d
+    let me = crate::this_computer::LocalIdentity { hostname: hostname(), ..Default::default() };
+    Discovery { networks: vec![lan_network(net)], devices: vec![crate::this_computer::observation(Some(net), &me)], notes: Vec::new() }
 }
 
 /// This computer's host name, from the environment or `hostname`.
@@ -59,11 +48,17 @@ pub fn hostname() -> Option<String> {
 
 /// Run the passive sources; blocking (a few seconds for mDNS and SSDP, in parallel).
 pub fn passive(opts: Passive) -> Discovery {
+    passive_with(opts, netinfo::detect().as_ref(), &crate::this_computer::detect())
+}
+
+/// [`passive`] with this computer's LAN and interfaces already detected. This computer is
+/// always reported, network or not.
+pub fn passive_with(opts: Passive, net: Option<&netinfo::LocalNet>, me: &crate::this_computer::LocalIdentity) -> Discovery {
     let mut d = Discovery::default();
-    let net = netinfo::detect();
-    if let Some(n) = &net {
-        d.extend(local(n));
+    if let Some(n) = net {
+        d.networks.push(lan_network(n));
     }
+    d.devices.push(crate::this_computer::observation(net, me));
     let mdns = opts.mdns.then(|| std::thread::spawn(move || mdns::browse(opts.wait)));
     let ssdp = opts.ssdp.then(|| {
         std::thread::spawn(move || {

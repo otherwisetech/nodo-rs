@@ -345,3 +345,20 @@ app.settings.term_font = Font size
 app.settings.term_hint = Tabs run your login shell and its environment. The terminal app is also in each device's More menu.
 app.edit.ssh_user = SSH user
 app.edit.ssh_user_ph = e.g. pi (empty: your own user name)
+
+# this computer
+app.me.badge_mac = This Mac
+app.me.badge = This computer
+app.me.you_are_here = You are here
+app.me.footer = This computer: {summary}
+app.me.footer_tip = Show this computer on the map
+app.me.interfaces = Interfaces
+app.me.not_found = This computer isn't on the map yet: refresh to add it
+app.iface.wifi = Wi-Fi
+app.iface.ethernet = Ethernet
+app.iface.tailscale = Tailscale
+app.iface.vpn = VPN
+app.iface.bridge = Bridge
+app.iface.other = Other
+app.list.me_first = This computer on top
+app.term.local_shell = Local shell

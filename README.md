@@ -59,6 +59,13 @@ for scripts and AI agents.
   that moved to another machine is taken from the old one. A LAN machine and its Tailscale node
   join when their host name is unambiguous, when the node's LAN endpoint is the machine's address,
   and for this computer itself, so each appears once on both networks. **Merge** and **split** fix the rest by hand.
+- **You are here**: the computer running Nodo is found at runtime from its interfaces (Wi-Fi,
+  Ethernet, Tailscale: MACs and addresses), host name and Tailscale node, so a map in a synced
+  folder opened on another computer marks that one. It gets an accent halo, a pin and a
+  "This Mac" badge on the graph (next to the gateway in the radial layout), a chip and a
+  "this computer on top" option in the list, its interfaces in the side panel, a local shell for
+  *Open terminal here*, and a line in the footer. It is added to the map on the first refresh even
+  when nothing else answers.
 - **Monitoring while the app is open**: saved devices (or any you choose) are checked every 30 s
   (configurable) with the system `ping`, falling back to a TCP connect to a port the device is
   known to answer on. Latency, uptime this session, last seen; a history per device (discovered,

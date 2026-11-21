@@ -149,6 +149,8 @@ pub struct ViewState {
     pub viewport: Rc<Cell<Bounds<Pixels>>>,
     pub sort: Sort,
     pub sort_desc: bool,
+    /// List: this computer pinned to the top whatever the sort.
+    pub me_first: bool,
     /// Pan / zoom chosen to fit the map once it first has nodes.
     pub fitted: bool,
 }
@@ -167,6 +169,7 @@ impl ViewState {
             viewport: Rc::new(Cell::new(Bounds::default())),
             sort: Sort::Name,
             sort_desc: false,
+            me_first: true,
             fitted: false,
         }
     }
@@ -366,8 +369,47 @@ impl NodoApp {
 
     /// The data changed: rebuild the graph on next render.
     pub fn touch(&mut self, cx: &mut Context<Self>) {
+        self.reidentify();
         self.generation += 1;
         cx.notify();
+    }
+
+    /// The device that is the computer running Nodo (worked out at runtime, see
+    /// `nodo_core::this_computer`).
+    pub fn this_computer(&self) -> Option<DeviceId> {
+        self.doc.as_ref()?.this_computer
+    }
+
+    /// Which device is this computer, from its interfaces, host name and Tailscale node; the
+    /// answer is remembered in the map only as a tie-breaking hint for this host name.
+    pub fn reidentify(&mut self) {
+        let Some(me) = self.disc.me.as_ref() else { return };
+        let Some(doc) = self.doc.as_mut() else { return };
+        let key = nodo_core::this_computer::hint_key(me);
+        let hint = doc.setting(&key).and_then(|v| v.parse().ok());
+        let found = nodo_core::this_computer::identify(&doc.data.devices, me, hint).or(doc.this_computer.filter(|id| doc.data.device(*id).is_some()));
+        if found != doc.this_computer {
+            doc.this_computer = found;
+            self.generation += 1;
+        }
+        if let Some(id) = found
+            && hint != Some(id)
+        {
+            let _ = doc.set_setting(&key, &id.to_string());
+        }
+    }
+
+    /// "macbookpro · 192.168.40.7 · 100.81.184.80" for the footer.
+    pub fn this_computer_summary(&self) -> Option<String> {
+        let doc = self.doc.as_ref()?;
+        let me = self.disc.me.as_ref();
+        let name = doc.this_computer.and_then(|id| doc.data.device(id)).map(|d| d.name.clone()).or_else(|| me.and_then(|m| m.host_label()))?;
+        let mut parts = vec![name];
+        match me {
+            Some(m) => parts.extend(m.summary_ips().iter().map(|i| i.to_string())),
+            None => parts.extend(doc.this_computer.and_then(|id| doc.data.device(id)).and_then(|d| d.primary_ip()).map(|i| i.to_string())),
+        }
+        Some(parts.join(" · ")) // i18n-ok: separator
     }
 
     pub fn cached(&mut self) -> Option<Rc<Cached>> {
@@ -379,7 +421,7 @@ impl NodoApp {
         {
             return Some(c.clone());
         }
-        let graph = nodo_core::graph::build(&doc.data, &GraphOpts { layers: self.view.layers.clone() });
+        let graph = nodo_core::graph::build(&doc.data, &GraphOpts { layers: self.view.layers.clone(), this_computer: doc.this_computer });
         let placed = nodo_core::layout::layout(&graph, self.view.mode);
         let c = Rc::new(Cached { generation: self.generation, layers: self.view.layers.clone(), mode: self.view.mode, graph, placed });
         self.cache = Some(c.clone());
@@ -741,6 +783,28 @@ impl NodoApp {
             .text_size(px(11.))
             .text_color(t.ink_muted)
             .child(div().flex_1().min_w_0().truncate().child(left))
+            .children(self.this_computer_summary().map(|s| {
+                let me = self.this_computer();
+                div()
+                    .id("footer-me")
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(4.))
+                    .max_w(px(420.))
+                    .cursor_pointer()
+                    .hover(move |s| s.text_color(ink))
+                    .child(crate::ui::kind_svg("pin", 11., t.accent))
+                    .child(div().truncate().child(i18n::t!("app.me.footer", summary = s)))
+                    .tooltip(|w, cx| gpui_component::tooltip::Tooltip::new(i18n::t!("app.me.footer_tip")).build(w, cx))
+                    .on_click(cx.listener(move |this, _, _, cx| match me {
+                        Some(id) => {
+                            this.select_device(id, cx);
+                            this.center_on(id);
+                        }
+                        None => this.toast(i18n::t!("app.me.not_found"), cx),
+                    }))
+            }))
             .children(self.render_term_footer(t, cx))
             .children(self.monitor_status(t))
             .child(crate::star::footer_link(t, cx))

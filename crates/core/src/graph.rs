@@ -44,11 +44,13 @@ impl Graph {
 #[derive(Debug, Clone)]
 pub struct GraphOpts {
     pub layers: Vec<Layer>,
+    /// Drawn first among its siblings: next to the gateway, at the top of the LAN ring.
+    pub this_computer: Option<DeviceId>,
 }
 
 impl Default for GraphOpts {
     fn default() -> Self {
-        GraphOpts { layers: Layer::ALL.to_vec() }
+        GraphOpts { layers: Layer::ALL.to_vec(), this_computer: None }
     }
 }
 
@@ -101,7 +103,7 @@ pub fn build(map: &MapData, opts: &GraphOpts) -> Graph {
         let first = addrs.first();
         let parent = hub_for(&g, first.and_then(|a| a.network));
         let me = g.nodes.len();
-        g.nodes.push(GNode { node: NodeRef::Device(d.id), parent: Some(parent), layer: first.map(|a| a.layer), key: format!("1{}{:010}", d.name.to_lowercase(), d.id) });
+        g.nodes.push(GNode { node: NodeRef::Device(d.id), parent: Some(parent), layer: first.map(|a| a.layer), key: if Some(d.id) == opts.this_computer { "1".into() } else { format!("1{}{:010}", d.name.to_lowercase(), d.id) } });
         let mut linked = vec![parent];
         let elsewhere = addrs.iter().any(|x| matches!(x.layer, Layer::Tailscale | Layer::Aws | Layer::WireGuard));
         for a in addrs.iter().skip(1) {
@@ -164,6 +166,20 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn this_computer_first_beside_the_gateway() {
+        let m = sample();
+        let devs = |g: &Graph| g.children(0).into_iter().filter_map(|i| match g.nodes[i].node { NodeRef::Device(d) => Some(d), _ => None }).collect::<Vec<_>>();
+        let plain = devs(&build(&m, &GraphOpts::default()));
+        let last = *plain.last().unwrap();
+        let g = build(&m, &GraphOpts { this_computer: Some(last), ..Default::default() });
+        assert_eq!(devs(&g)[0], last, "first on the LAN ring");
+        let p = crate::layout::layout(&g, crate::layout::Mode::Radial);
+        let me = g.index_of(NodeRef::Device(last)).unwrap();
+        let r = |i: usize| (p.pos[i].0.powi(2) + p.pos[i].1.powi(2)).sqrt();
+        assert!(g.children(0).iter().all(|&i| r(me) <= r(i) + 0.1), "on the innermost ring");
+    }
+
+    #[test]
     fn tree_shape() {
         let m = sample();
         let g = build(&m, &GraphOpts::default());
@@ -177,7 +193,7 @@ pub(crate) mod tests {
         assert_eq!(g.overlay, vec![(idx(NodeRef::Device(2)), idx(NodeRef::Network(2)), Layer::Tailscale)]);
         assert!(g.index_of(NodeRef::Network(1)).is_none(), "the gateway stands for its LAN");
         // LAN hidden: virtual root, the laptop hangs from the tailnet
-        let g = build(&m, &GraphOpts { layers: vec![Layer::Tailscale] });
+        let g = build(&m, &GraphOpts { layers: vec![Layer::Tailscale], ..Default::default() });
         assert_eq!(g.nodes[0].node, NodeRef::Root);
         assert_eq!(g.nodes.iter().filter(|n| matches!(n.node, NodeRef::Device(_))).count(), 3, "laptop, phone, and the saved one");
         assert_eq!(g.nodes[g.index_of(NodeRef::Device(2)).unwrap()].parent, g.index_of(NodeRef::Network(2)));

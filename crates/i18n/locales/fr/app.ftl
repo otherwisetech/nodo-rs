@@ -345,3 +345,20 @@ app.settings.term_font = Taille de police
 app.settings.term_hint = Les onglets lancent votre shell de connexion et son environnement. L'app de terminal est aussi dans le menu Plus de chaque appareil.
 app.edit.ssh_user = Utilisateur SSH
 app.edit.ssh_user_ph = ex. pi (vide : votre propre nom d'utilisateur)
+
+# this computer
+app.me.badge_mac = Ce Mac
+app.me.badge = Cet ordinateur
+app.me.you_are_here = Vous êtes ici
+app.me.footer = Cet ordinateur : {summary}
+app.me.footer_tip = Montrer cet ordinateur sur la carte
+app.me.interfaces = Interfaces
+app.me.not_found = Cet ordinateur n'est pas encore sur la carte : actualisez pour l'ajouter
+app.iface.wifi = Wi-Fi
+app.iface.ethernet = Ethernet
+app.iface.tailscale = Tailscale
+app.iface.vpn = VPN
+app.iface.bridge = Pont
+app.iface.other = Autre
+app.list.me_first = Cet ordinateur en haut
+app.term.local_shell = Shell local

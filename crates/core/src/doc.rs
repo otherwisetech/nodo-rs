@@ -9,6 +9,9 @@ use std::path::Path;
 pub struct Doc {
     pub store: Store,
     pub data: MapData,
+    /// The device that is the computer running Nodo, worked out at runtime
+    /// ([`crate::this_computer::identify`]); never written to the file.
+    pub this_computer: Option<DeviceId>,
 }
 
 /// What [`Doc::apply`] did, for the UI and the alerts.
@@ -24,15 +27,20 @@ pub struct Applied {
 impl Doc {
     pub fn create(path: &Path) -> Result<Doc> {
         let store = Store::create(path)?;
-        Ok(Doc { store, data: MapData::default() })
+        Ok(Doc { store, data: MapData::default(), this_computer: None })
     }
 
     pub fn open(path: &Path) -> Result<Doc> {
         let store = Store::open(path)?;
         let data = store.load()?;
-        let mut doc = Doc { store, data };
+        let mut doc = Doc { store, data, this_computer: None };
         // maps written before addresses were classified by what they are
-        let (devs, nets) = identity::reclassify(&mut doc.data);
+        let (mut devs, nets) = identity::reclassify(&mut doc.data);
+        // maps that stored "this computer" as a fact (wrong once the file is synced elsewhere)
+        for d in doc.data.devices.iter_mut().filter(|d| d.fact("this_computer").is_some()) {
+            d.facts.retain(|(k, _)| k != "this_computer");
+            devs.push(d.id);
+        }
         doc.save_networks(&nets)?;
         doc.save_ids(&devs)?;
         Ok(doc)
@@ -63,7 +71,14 @@ impl Doc {
     /// Merge a discovery into the map and write what changed, with history events.
     pub fn apply(&mut self, d: &Discovery, now: i64) -> Result<Applied> {
         let lan_before = self.data.devices.iter().filter(|x| x.layers().contains(&Layer::Lan)).count();
-        let report = identity::ingest(&mut self.data, d, now);
+        let report = identity::ingest_as(&mut self.data, d, now, self.this_computer);
+        // a new device for this computer (first run, or nothing matched before)
+        if self.this_computer.is_none()
+            && let Some(i) = d.devices.iter().position(|o| o.facts.iter().any(|(k, _)| k == "this_computer"))
+            && let Some(id) = identity::find(&self.data.devices, &d.devices[i]).map(|x| self.data.devices[x].id)
+        {
+            self.this_computer = Some(id);
+        }
         // networks first: addresses reference them
         let mut nets: Vec<Network> = report.networks.iter().filter_map(|id| self.data.network(*id).cloned()).collect();
         nets.sort_by_key(|n| n.parent.is_some());
@@ -77,7 +92,8 @@ impl Doc {
         for (id, what) in &report.ip_changes {
             self.store.add_event(Some(*id), now, EventKind::IpChanged, what)?;
         }
-        let new_lan = report.new.iter().copied().filter(|id| self.data.device(*id).is_some_and(|x| x.layers().contains(&Layer::Lan) && x.fact("this_computer").is_none())).collect();
+        let me = self.this_computer;
+        let new_lan = report.new.iter().copied().filter(|id| Some(*id) != me && self.data.device(*id).is_some_and(|x| x.layers().contains(&Layer::Lan))).collect();
         Ok(Applied { report, new_lan, lan_before })
     }
 
@@ -248,5 +264,28 @@ mod tests {
         assert!(ev.iter().any(|e| e.kind == EventKind::Discovered), "pi's history moved over");
         assert_eq!(doc.data.device(id).unwrap().kind, DeviceKind::Printer);
         assert_eq!(doc.title(), "lab");
+    }
+
+    #[test]
+    fn this_computer_is_not_stored() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("home.nodo");
+        let mut doc = Doc::create(&path).unwrap();
+        let me = crate::this_computer::LocalIdentity { hostname: Some("pc-1".into()), ..Default::default() };
+        let mut d = Discovery::default();
+        d.devices.push(crate::this_computer::observation(None, &me));
+        let a = doc.apply(&d, 10).unwrap();
+        assert_eq!(a.report.new.len(), 1);
+        assert!(a.new_lan.is_empty());
+        let id = a.report.new[0];
+        assert_eq!(doc.this_computer, Some(id), "known for this session");
+        // a map written by an older version with the flag stored
+        let mut dev = doc.data.device(id).unwrap().clone();
+        dev.set_fact("this_computer", "1");
+        doc.update_device(dev).unwrap();
+        drop(doc);
+        let doc = Doc::open(&path).unwrap();
+        assert_eq!(doc.this_computer, None);
+        assert!(doc.data.device(id).unwrap().fact("this_computer").is_none(), "the old flag is dropped on open");
     }
 }

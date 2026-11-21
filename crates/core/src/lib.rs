@@ -8,6 +8,7 @@
 //! - [`graph`] / [`layout`]: the tree to draw and its positions
 //! - [`monitor`]: reachability state machine and the probing engine
 //! - [`export`] / [`render`]: CSV / JSON / Mermaid, SVG / PDF
+//! - [`this_computer`]: which device is the computer Nodo runs on (worked out at runtime)
 pub mod cidr;
 pub mod cmd;
 pub mod db;
@@ -26,5 +27,6 @@ pub mod remote;
 pub mod render;
 pub mod shell_env;
 pub mod time;
+pub mod this_computer;
 pub mod tools;
 pub mod wol;

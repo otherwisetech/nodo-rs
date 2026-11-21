@@ -19,6 +19,12 @@ fn conflicts(d: &Device, idents: &[Ident]) -> bool {
 
 /// Index of the device `o` describes, if any.
 pub fn find(devices: &[Device], o: &Observation) -> Option<usize> {
+    find_as(devices, o, None)
+}
+
+/// [`find`], knowing which device is this computer (`me`, an index): this computer seen by
+/// another source joins it.
+pub fn find_as(devices: &[Device], o: &Observation, me: Option<usize>) -> Option<usize> {
     // 1. a strong identity, strongest first
     let mut best: Option<(u8, usize)> = None;
     for id in o.idents.iter().filter(|i| i.kind != IdentKind::Host) {
@@ -55,8 +61,11 @@ pub fn find(devices: &[Device], o: &Observation) -> Option<usize> {
     let hinted = |d: &Device| d.addrs.iter().any(|a| a.layer == Layer::Lan && o.lan_hints.contains(&a.ip));
     // 3. this computer seen by another source (its Tailscale node and its LAN interface); with
     //    hints, only if they agree (a synced map may have been made on another computer)
-    if o.facts.iter().any(|(k, _)| k == "this_computer")
-        && let Some(i) = unique(devices.iter().enumerate().filter(|(_, d)| d.fact("this_computer").is_some() && (o.lan_hints.is_empty() || hinted(d)) && !conflicts(d, &o.idents)).map(|(i, _)| i).collect())
+    if is_this_computer(o)
+        && let Some(i) = me
+        && let Some(d) = devices.get(i)
+        && (o.lan_hints.is_empty() || hinted(d))
+        && !conflicts(d, &o.idents)
     {
         return Some(i);
     }
@@ -72,6 +81,10 @@ pub fn find(devices: &[Device], o: &Observation) -> Option<usize> {
         }
     }
     None
+}
+
+fn is_this_computer(o: &Observation) -> bool {
+    o.facts.iter().any(|(k, _)| k == "this_computer")
 }
 
 /// Names too common to identify anything.
@@ -116,6 +129,12 @@ impl IngestReport {
 
 /// Networks first (so addresses can point at them), then devices.
 pub fn ingest(map: &mut MapData, d: &Discovery, now: i64) -> IngestReport {
+    ingest_as(map, d, now, None)
+}
+
+/// [`ingest`], knowing which device is this computer (worked out at runtime by
+/// [`crate::this_computer::identify`]); the observations of this computer in `d` join it.
+pub fn ingest_as(map: &mut MapData, d: &Discovery, now: i64, me: Option<DeviceId>) -> IngestReport {
     let mut rep = IngestReport::default();
     for n in &d.networks {
         let id = upsert_network(map, n);
@@ -132,8 +151,13 @@ pub fn ingest(map: &mut MapData, d: &Discovery, now: i64) -> IngestReport {
             }
         }
     }
+    let mut me = me.and_then(|id| map.devices.iter().position(|x| x.id == id));
     for o in &d.devices {
-        ingest_one(map, o, now, &mut rep);
+        if let Some(i) = ingest_one(map, o, now, me, &mut rep)
+            && is_this_computer(o)
+        {
+            me = Some(i);
+        }
     }
     let (devs, nets) = reclassify(map);
     rep.updated.extend(devs);
@@ -169,9 +193,9 @@ fn upsert_network(map: &mut MapData, n: &NetworkObservation) -> NetworkId {
     id
 }
 
-fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestReport) {
+fn ingest_one(map: &mut MapData, o: &Observation, now: i64, me: Option<usize>, rep: &mut IngestReport) -> Option<usize> {
     if o.ips.is_empty() && o.idents.is_empty() {
-        return;
+        return None;
     }
     let layer = o.layer();
     let src = o.source();
@@ -186,10 +210,11 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
             _ => map.network_for(ip, layer).or(own.filter(|n| n.cidr.as_deref().and_then(crate::cidr::Cidr::parse).is_some_and(|c| c.addr.is_ipv4() != ip.is_ipv4())).map(|n| n.id)),
         }
     };
-    let found = find(&map.devices, o);
-    // an address-less record only adds to a device we already know
-    if found.is_none() && o.ips.is_empty() && !matches!(src, Source::Manual | Source::Import) {
-        return;
+    let found = find_as(&map.devices, o, me);
+    // an address-less record only adds to a device we already know (this computer is always
+    // on its own map)
+    if found.is_none() && o.ips.is_empty() && !matches!(src, Source::Manual | Source::Import) && !is_this_computer(o) {
+        return None;
     }
     let idx = match found {
         Some(i) => {
@@ -293,7 +318,8 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
         }
     }
     d.services.sort();
-    for (k, v) in &o.facts {
+    // which device is this computer is worked out at runtime, never stored
+    for (k, v) in o.facts.iter().filter(|(k, _)| k != "this_computer") {
         d.set_fact(k, v);
     }
     if o.online.is_some() {
@@ -316,6 +342,7 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
             _ => d.kind,
         };
     }
+    Some(idx)
 }
 
 /// "Synology 192.168.1.10", or the address alone.
@@ -715,11 +742,14 @@ mod tests {
         let tv = arp("192.168.50.51", "00:11:22:33:44:51");
         ingest(&mut m, &Discovery { networks: vec![lan], devices: vec![me, bridge, studio, tv], notes: vec![] }, 10);
         assert_eq!(m.devices.len(), 4);
+        let me_id = m.devices.iter().find(|d| d.ident(IdentKind::Mac) == Some("00:11:22:33:44:07")).unwrap().id;
+        assert!(m.devices.iter().all(|d| d.fact("this_computer").is_none()), "not stored");
         let ts = crate::discover::tailscale::parse_status(crate::discover::tailscale::tests::STATUS_1_104).unwrap();
-        let r = ingest(&mut m, &ts, 20);
+        // the app knows which device is this computer (this_computer::identify)
+        let r = ingest_as(&mut m, &ts, 20, Some(me_id));
         assert_eq!(r.new.len(), 3, "desktop, phone, vps are new; this computer and the studio join LAN devices");
         assert_eq!(m.devices.len(), 7);
-        let me = m.devices.iter().find(|d| d.fact("this_computer").is_some()).unwrap();
+        let me = m.device(me_id).unwrap();
         assert_eq!(me.layers(), vec![Layer::Lan, Layer::Tailscale], "this computer appears once, on both networks");
         assert!(me.ident(IdentKind::Mac).is_some() && me.ident(IdentKind::TailscaleNode) == Some("nSelfAAAA"));
         assert_eq!(me.owner, "Ana P");
@@ -734,9 +764,9 @@ mod tests {
         let id = m.devices.iter().find(|d| d.ident(IdentKind::TailscaleNode) == Some("nDeskBBBB")).unwrap().id;
         m.device_mut(id).unwrap().owner = "Reception".into();
         let again = crate::discover::tailscale::parse_status(&crate::discover::tailscale::tests::STATUS_1_104.replace("\"DisplayName\": \"Ana P\"", "\"DisplayName\": \"Ana Pérez\"").replace("\"DisplayName\": \"Example Office\"", "\"DisplayName\": \"Office\"")).unwrap();
-        let r = ingest(&mut m, &again, 30);
+        let r = ingest_as(&mut m, &again, 30, Some(me_id));
         assert!(r.new.is_empty(), "a second run updates the same devices");
         assert_eq!(m.device(id).unwrap().owner, "Reception");
-        assert_eq!(m.devices.iter().find(|d| d.fact("this_computer").is_some()).unwrap().owner, "Ana Pérez");
+        assert_eq!(m.device(me_id).unwrap().owner, "Ana Pérez");
     }
 }

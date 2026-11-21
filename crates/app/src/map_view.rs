@@ -49,6 +49,11 @@ pub fn kind_label(k: nodo_core::model::DeviceKind) -> String {
     }
 }
 
+/// "This Mac" on a Mac, "This computer" elsewhere.
+pub fn me_badge() -> String {
+    if cfg!(target_os = "macos") { i18n::t!("app.me.badge_mac") } else { i18n::t!("app.me.badge") }
+}
+
 pub fn status_color(t: &Tokens, s: Status) -> Hsla {
     match s {
         Status::Up(_) => t.up,
@@ -244,6 +249,7 @@ impl NodoApp {
             Sort::Owner => i18n::t!("app.list.col_owner"),
         };
         let weak = cx.entity().downgrade();
+        let me_first = self.view.me_first;
         Button::new("list-sort").ghost().small().icon(if self.view.sort_desc { IconName::SortDescending } else { IconName::SortAscending }).label(i18n::t!("app.list.sort_by", by = label(cur))).dropdown_menu(move |mut menu, _, _| {
             for s in [Sort::Name, Sort::Kind, Sort::Ip, Sort::Status, Sort::LastSeen, Sort::Layer, Sort::Owner] {
                 let w = weak.clone();
@@ -251,7 +257,14 @@ impl NodoApp {
                     w.update(cx, |this, cx| this.sort_by(s, cx)).ok();
                 }));
             }
-            menu
+            let w = weak.clone();
+            menu.separator().item(PopupMenuItem::new(i18n::t!("app.list.me_first")).checked(me_first).on_click(move |_, _, cx| {
+                w.update(cx, |this, cx| {
+                    this.view.me_first = !this.view.me_first;
+                    cx.notify();
+                })
+                .ok();
+            }))
         })
     }
 
@@ -498,8 +511,11 @@ impl NodoApp {
         let online = st.online();
         let ring = if online { color } else { t.border_strong };
         let id = d.id;
-        let is_me = d.fact("this_computer").is_some();
+        let is_me = self.this_computer() == Some(id);
         let session = self.has_session(id, cx);
+        // "you are here": an accent halo around the circle, a pin, a badge under the name; the
+        // badge keeps a legible minimum size when zoomed far out
+        let halo = 9.;
         let circle = div()
             .relative()
             .size(z(CIRCLE))
@@ -508,9 +524,11 @@ impl NodoApp {
             .items_center()
             .justify_center()
             .bg(if selected { t.accent_soft } else { t.surface })
-            .border(z(if selected { 3. } else { 2. }))
-            .border_color(if selected { t.accent } else { ring })
+            .border(z(if selected || is_me { 3. } else { 2. }))
+            .border_color(if selected || is_me { t.accent } else { ring })
             .shadow_md()
+            .when(is_me, |c| c.child(div().absolute().top(z(-halo)).left(z(-halo)).size(z(CIRCLE + 2. * halo)).rounded_full().border(z(2.)).border_color(t.accent.opacity(0.45)).bg(t.accent.opacity(if t.dark { 0.16 } else { 0.10 }))))
+            .when(is_me, |c| c.child(div().absolute().top(z(-6.)).left(z(-6.)).size(z(18.)).rounded_full().flex().items_center().justify_center().bg(t.accent).border(z(1.5)).border_color(t.surface).child(ui::kind_svg("pin", 11. * zoom, t.on_fill()))))
             .child(ui::kind_svg(d.kind.id(), 22. * zoom, if online { t.ink } else { t.ink_muted }))
             .child(div().absolute().top(z(-1.)).right(z(-1.)).size(z(12.)).rounded_full().border(z(2.)).border_color(t.surface).bg(crate::map_view::status_color(t, st)))
             .when(d.saved, |c| c.child(div().absolute().bottom(z(-2.)).right(z(-4.)).child(icon(IconName::Star, 11. * zoom, t.tag))))
@@ -533,6 +551,11 @@ impl NodoApp {
             .child(circle)
             .child(div().max_w(z(NODE_W)).truncate().px(z(4.)).rounded(z(4.)).bg(t.canvas.opacity(0.85)).text_size(z(12.)).font_weight(if is_me { FontWeight::BOLD } else { FontWeight::MEDIUM }).child(d.name.clone()))
             .when(zoom >= 0.45, |n| n.child(div().px(z(4.)).rounded(z(4.)).bg(t.canvas.opacity(0.85)).text_size(z(10.5)).font_family(MONO).text_color(t.ink_muted).child(d.primary_ip().map(|i| i.to_string()).unwrap_or_default())))
+            .when(is_me, |n| {
+                let s = |v: f32| px((v * zoom).max(v * 0.7));
+                n.child(div().flex().items_center().gap(s(3.)).px(s(6.)).py(s(1.)).rounded(s(8.)).bg(t.accent).text_color(t.on_fill()).text_size(s(10.)).font_weight(FontWeight::SEMIBOLD).child(ui::kind_svg("pin", 10. * zoom.max(0.7), t.on_fill())).child(me_badge()))
+            })
+            .when(is_me, |n| n.tooltip(|w, cx| Tooltip::new(i18n::t!("app.me.you_are_here")).build(w, cx)))
             .on_click(cx.listener(move |this, ev: &ClickEvent, _, cx| {
                 cx.stop_propagation();
                 this.select_device(id, cx);
@@ -545,7 +568,7 @@ impl NodoApp {
     }
 
     pub(crate) fn device_menu(&self, d: &Device, cx: &mut Context<Self>) -> DeviceMenu {
-        DeviceMenu { weak: cx.entity().downgrade(), id: d.id, has_ip: d.primary_ip().is_some(), has_mac: d.macs().next().is_some(), saved: d.saved }
+        DeviceMenu { weak: cx.entity().downgrade(), id: d.id, has_ip: d.primary_ip().is_some(), has_mac: d.macs().next().is_some(), saved: d.saved, is_me: self.this_computer() == Some(d.id) }
     }
 
     fn map_list(&mut self, t: &Tokens, cx: &mut Context<Self>) -> AnyElement {
@@ -571,6 +594,15 @@ impl NodoApp {
         }
         if self.view.sort_desc {
             rows.reverse();
+        }
+        let me = self.this_computer();
+        let group = self.view.sort == Sort::Owner;
+        if self.view.me_first
+            && !group
+            && let Some(k) = rows.iter().position(|d| Some(d.id) == me)
+        {
+            let d = rows.remove(k);
+            rows.insert(0, d);
         }
         let head = |id: &'static str, w: Option<f32>, s: String, sort: Sort, cx: &mut Context<Self>| {
             let on = self.view.sort == sort;
@@ -600,7 +632,6 @@ impl NodoApp {
             .child(head("h-seen", Some(110.), i18n::t!("app.list.col_seen"), Sort::LastSeen, cx));
         let hover = if t.dark { t.border } else { t.canvas };
         let mut list = div().id("dev-list").flex().flex_col().flex_1().min_h_0().overflow_y_scroll();
-        let group = self.view.sort == Sort::Owner;
         for (k, d) in rows.iter().enumerate() {
             let owner = d.owner.trim();
             if group && (k == 0 || !rows[k - 1].owner.trim().eq_ignore_ascii_case(owner)) {
@@ -629,7 +660,7 @@ impl NodoApp {
                     .when(!selected, |r| r.hover(move |x| x.bg(hover)))
                     .when(!s.online(), |r| r.text_color(t.ink_muted))
                     .child(div().w(px(90.)).flex_none().flex().items_center().gap(px(6.)).child(div().size(px(8.)).rounded_full().bg(status_color(t, s))).child(div().text_size(px(11.5)).truncate().child(status_label(s))))
-                    .child(div().flex().flex_1().min_w_0().items_center().gap(px(6.)).child(ui::kind_svg(d.kind.id(), 15., t.ink_muted)).child(div().truncate().child(d.name.clone())).when(d.saved, |r| r.child(icon(IconName::Star, 11., t.tag))))
+                    .child(div().flex().flex_1().min_w_0().items_center().gap(px(6.)).child(ui::kind_svg(d.kind.id(), 15., if Some(id) == me { t.accent } else { t.ink_muted })).child(div().truncate().when(Some(id) == me, |n| n.font_weight(FontWeight::SEMIBOLD)).child(d.name.clone())).when(Some(id) == me, |r| r.child(div().flex().flex_none().items_center().gap(px(3.)).px(px(6.)).rounded(px(5.)).bg(t.accent.opacity(0.14)).text_color(t.accent).text_size(px(10.5)).child(ui::kind_svg("pin", 10., t.accent)).child(i18n::t!("app.fact.this_computer")))).when(d.saved, |r| r.child(icon(IconName::Star, 11., t.tag))))
                     .child(div().w(px(110.)).flex_none().truncate().text_size(px(11.5)).child(kind_label(d.kind)))
                     .child(div().w(px(130.)).flex_none().truncate().font_family(MONO).text_size(px(11.5)).child(d.primary_ip().map(|i| i.to_string()).unwrap_or_default()))
                     .child(div().w(px(140.)).flex_none().truncate().font_family(MONO).text_size(px(11.)).text_color(t.ink_muted).child(d.macs().next().unwrap_or_default().to_string()))
@@ -659,6 +690,7 @@ pub(crate) struct DeviceMenu {
     has_ip: bool,
     has_mac: bool,
     saved: bool,
+    is_me: bool,
 }
 
 impl DeviceMenu {
@@ -671,7 +703,8 @@ impl DeviceMenu {
 
     pub fn build(&self, menu: PopupMenu, _window: &mut Window, _cx: &mut Context<PopupMenu>) -> PopupMenu {
         let ip = self.has_ip;
-        menu.item(self.item(i18n::t!("app.action.ssh"), ip, |this, id, window, cx| this.ssh(id, window, cx)))
+        let ssh = if self.is_me { self.item(i18n::t!("app.term.local_shell"), true, |this, id, window, cx| this.shell_here(id, window, cx)) } else { self.item(i18n::t!("app.action.ssh"), ip, |this, id, window, cx| this.ssh(id, window, cx)) };
+        menu.item(ssh)
             .item(self.item(i18n::t!("app.action.web"), ip, |this, id, _, cx| this.open_web(id, cx)))
             .item(self.item(i18n::t!("app.action.vnc"), ip, |this, id, _, cx| this.open_vnc(id, cx)))
             .separator()

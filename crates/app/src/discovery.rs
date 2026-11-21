@@ -31,6 +31,8 @@ pub struct DiscState {
     pub notes: Vec<(Source, String)>,
     pub last_refresh: Option<i64>,
     pub local: Option<LocalNet>,
+    /// This computer's interfaces, host name and Tailscale node (from the last refresh).
+    pub me: Option<nodo_core::this_computer::LocalIdentity>,
     /// The last run of each CLI source, for the Sources panel.
     pub runs: Vec<(Source, SourceRun)>,
     /// Tailscale's CLI is installed (looked up once); it then runs with every refresh.
@@ -197,13 +199,26 @@ impl NodoApp {
         self.disc.passive = true;
         let task = cx.background_executor().spawn(async move {
             let net = nodo_core::discover::netinfo::detect();
-            (net, nodo_core::discover::passive(Default::default()))
+            let me = nodo_core::this_computer::detect();
+            let d = nodo_core::discover::passive_with(Default::default(), net.as_ref(), &me);
+            (net, me, d)
         });
         cx.spawn(async move |this, cx| {
-            let (net, d) = task.await;
+            let (net, mut me, d) = task.await;
             this.update(cx, |this, cx| {
                 this.disc.passive = false;
                 this.disc.local = net;
+                // the Tailscale side comes from the last `tailscale status`
+                if let Some(old) = this.disc.me.take() {
+                    me.tailscale_node = old.tailscale_node.clone();
+                    for i in old.ifaces.into_iter().filter(|i| i.kind == nodo_core::this_computer::IfaceKind::Tailscale) {
+                        if !me.ifaces.iter().any(|x| x.kind == i.kind) {
+                            me.ifaces.push(i);
+                        }
+                    }
+                }
+                this.disc.me = Some(me);
+                this.reidentify();
                 this.disc.last_refresh = Some(nodo_core::time::now());
                 this.apply(d, &[Source::Arp, Source::Mdns, Source::Ssdp], cx);
                 // after the LAN devices are in, so tailnet nodes can join them
@@ -354,6 +369,10 @@ impl NodoApp {
                     this.toast(msg, cx);
                 }
                 this.record_run(Source::Tailscale, &d);
+                if let Some(me) = this.disc.me.as_mut() {
+                    me.with_tailscale(&d);
+                }
+                this.reidentify();
                 this.apply(d, &[Source::Tailscale], cx);
             })
             .ok();

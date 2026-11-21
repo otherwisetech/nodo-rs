@@ -345,3 +345,20 @@ app.settings.term_font = Tamanho da fonte
 app.settings.term_hint = As abas usam o seu shell de login e o ambiente dele. O app de terminal também está no menu Mais de cada dispositivo.
 app.edit.ssh_user = Usuário SSH
 app.edit.ssh_user_ph = ex.: pi (vazio: o seu próprio usuário)
+
+# this computer
+app.me.badge_mac = Este Mac
+app.me.badge = Este computador
+app.me.you_are_here = Você está aqui
+app.me.footer = Este computador: {summary}
+app.me.footer_tip = Mostrar este computador no mapa
+app.me.interfaces = Interfaces
+app.me.not_found = Este computador ainda não está no mapa: atualize para adicioná-lo
+app.iface.wifi = Wi-Fi
+app.iface.ethernet = Ethernet
+app.iface.tailscale = Tailscale
+app.iface.vpn = VPN
+app.iface.bridge = Ponte
+app.iface.other = Outra
+app.list.me_first = Este computador no topo
+app.term.local_shell = Shell local

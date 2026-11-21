@@ -246,6 +246,11 @@ impl NodoApp {
 
     /// SSH into the device, in a tab or in the terminal app as the setting says.
     pub fn ssh(&mut self, id: DeviceId, window: &mut Window, cx: &mut Context<Self>) {
+        // no SSH into the computer we're on: a local shell
+        if self.this_computer() == Some(id) {
+            self.shell_here(id, window, cx);
+            return;
+        }
         if Prefer::parse(crate::settings::Settings::load().term_prefer.as_deref()) == Prefer::External {
             self.ssh_external(id, cx);
             return;
@@ -269,8 +274,13 @@ impl NodoApp {
     /// A login shell with `NODO_DEVICE_*` set to the device's address, name and SSH user.
     pub fn shell_here(&mut self, id: DeviceId, window: &mut Window, cx: &mut Context<Self>) {
         let Some(d) = self.doc.as_ref().and_then(|doc| doc.data.device(id)).cloned() else { return };
-        let env = nodo_core::remote::device_env(&d, &self.magic_suffixes());
         let (program, args) = login_shell();
+        // on this computer, a plain local shell (no NODO_DEVICE_* pointing back at itself)
+        if self.this_computer() == Some(id) {
+            self.open_tab(Spawn { program, args, cwd: home(), env: Vec::new() }, i18n::t!("app.term.local_shell"), Some(id), TabKind::Shell, window, cx);
+            return;
+        }
+        let env = nodo_core::remote::device_env(&d, &self.magic_suffixes());
         self.open_tab(Spawn { program, args, cwd: home(), env }, d.name.clone(), Some(id), TabKind::Shell, window, cx);
     }
 

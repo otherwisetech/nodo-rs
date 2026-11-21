@@ -371,16 +371,23 @@ impl NodoApp {
         let now = nodo_core::time::now();
         let kv = |k: String, v: String| div().flex().flex_col().gap(px(2.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(k)).child(div().text_size(px(12.5)).line_height(px(17.)).child(v));
         let mono = |v: String| div().font_family(MONO).text_size(px(11.5)).child(v);
+        let is_me = self.this_computer() == Some(id);
         let mut info = div().flex().flex_col().gap(px(10.)).p(px(16.)).border_b_1().border_color(t.border);
+        if is_me {
+            info = info.child(div().flex().items_center().gap(px(5.)).text_size(px(11.5)).font_weight(FontWeight::SEMIBOLD).text_color(t.accent).child(ui::kind_svg("pin", 12., t.accent)).child(i18n::t!("app.fact.this_computer")));
+        }
         info = info.child(
             div()
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .child(div().size(px(40.)).flex_none().rounded_full().flex().items_center().justify_center().bg(t.canvas).border_2().border_color(status_color(t, st)).child(ui::kind_svg(d.kind.id(), 20., t.ink)))
+                .child(div().size(px(40.)).flex_none().rounded_full().flex().items_center().justify_center().bg(t.canvas).border_2().border_color(if is_me { t.accent } else { status_color(t, st) }).child(ui::kind_svg(d.kind.id(), 20., t.ink)))
                 .child(div().flex().flex_col().min_w_0().child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).line_height(px(20.)).child(d.name.clone())).child(div().text_size(px(12.)).text_color(t.ink_muted).child(kind_label(d.kind)))),
         );
         let mut chips = div().flex().flex_wrap().gap(px(4.)).child(ui::chip(status_label(st), status_color(t, st), 11.));
+        if is_me {
+            chips = chips.child(ui::chip(crate::map_view::me_badge(), t.accent, 11.));
+        }
         for l in d.layers() {
             chips = chips.child(ui::chip(layer_label(l), t.layer(l), 11.));
         }
@@ -412,6 +419,31 @@ impl NodoApp {
         if !d.addrs.is_empty() {
             info = info.child(div().flex().flex_col().gap(px(4.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(i18n::t!("app.device.addresses"))).child(addrs));
         }
+        // this computer's own interfaces, as the OS reports them right now
+        if is_me && let Some(me) = &self.disc.me {
+            use nodo_core::this_computer::IfaceKind as K;
+            let mut rows = div().flex().flex_col().gap(px(4.));
+            for i in me.sorted_ifaces().into_iter().filter(|i| i.kind != K::Other) {
+                let (label, color) = match i.kind {
+                    K::Wifi => (i18n::t!("app.iface.wifi"), t.layer(Layer::Lan)),
+                    K::Ethernet => (i18n::t!("app.iface.ethernet"), t.layer(Layer::Lan)),
+                    K::Tailscale => (i18n::t!("app.iface.tailscale"), t.layer(Layer::Tailscale)),
+                    K::Vpn => (i18n::t!("app.iface.vpn"), t.layer(Layer::WireGuard)),
+                    K::Bridge => (i18n::t!("app.iface.bridge"), t.ink_muted),
+                    K::Other => (i18n::t!("app.iface.other"), t.ink_muted),
+                };
+                let ips: Vec<String> = i.ips.iter().map(|ip| ip.to_string()).collect();
+                rows = rows.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(1.))
+                        .child(div().flex().items_center().gap(px(6.)).child(div().size(px(7.)).rounded_full().bg(color)).child(div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).child(label)).child(div().text_size(px(11.)).font_family(MONO).text_color(t.ink_muted).child(i.name.clone())))
+                        .children(ips.into_iter().map(|ip| div().pl(px(13.)).child(mono(ip)))),
+                );
+            }
+            info = info.child(div().flex().flex_col().gap(px(4.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(i18n::t!("app.me.interfaces"))).child(rows));
+        }
         for m in d.macs() {
             let vendor = nodo_core::mac::vendor(m).map(str::to_string).or_else(|| nodo_core::mac::is_random(m).then(|| i18n::t!("app.device.random_mac"))).unwrap_or_default();
             info = info.child(kv(i18n::t!("app.device.mac"), format!("{m}  {vendor}")));
@@ -434,9 +466,6 @@ impl NodoApp {
             if let Some(label) = fact_label(k).filter(|_| !v.is_empty() && k != "this_computer") {
                 info = info.child(kv(label, v.clone()));
             }
-        }
-        if d.fact("this_computer").is_some() {
-            info = info.child(ui::chip(i18n::t!("app.fact.this_computer"), t.accent, 11.));
         }
         if !d.services.is_empty() {
             let svc: Vec<String> = d.services.iter().map(|s| match (&s.label, s.port) {
@@ -469,7 +498,7 @@ impl NodoApp {
         let row = || div().flex().gap(px(6.));
         let mut actions = div().flex().flex_col().gap(px(6.)).p(px(16.)).border_b_1().border_color(t.border);
         actions = actions
-            .child(row().child(act("a-ssh", IconName::SquareTerminal, i18n::t!("app.action.ssh_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, window, cx| this.ssh(id, window, cx))))).child(act("a-web", IconName::Globe, i18n::t!("app.action.web_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.open_web(id, cx))))).child(act("a-vnc", IconName::Frame, i18n::t!("app.action.vnc_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.open_vnc(id, cx))))))
+            .child(row().child(act("a-ssh", IconName::SquareTerminal, if is_me { i18n::t!("app.term.local_shell") } else { i18n::t!("app.action.ssh_short") }, has_ip || is_me).when(has_ip || is_me, |b| b.on_click(cx.listener(move |this, _, window, cx| this.ssh(id, window, cx))))).child(act("a-web", IconName::Globe, i18n::t!("app.action.web_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.open_web(id, cx))))).child(act("a-vnc", IconName::Frame, i18n::t!("app.action.vnc_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.open_vnc(id, cx))))))
             .child(row().child(act("a-ip", IconName::Copy, i18n::t!("app.action.copy_ip_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.copy_ip(id, cx))))).child(act("a-mac", IconName::Copy, i18n::t!("app.action.copy_mac_short"), has_mac).when(has_mac, |b| b.on_click(cx.listener(move |this, _, _, cx| this.copy_mac(id, cx))))).child(act("a-wol", IconName::Sun, i18n::t!("app.action.wake_short"), has_mac).when(has_mac, |b| b.on_click(cx.listener(move |this, _, _, cx| this.wake(id, cx))))))
             .child(row().child(act("a-ping", IconName::Inspector, i18n::t!("app.action.ping"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, window, cx| this.run_tool(id, Tool::Ping, window, cx))))).child(act("a-trace", IconName::Map, i18n::t!("app.action.traceroute"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, window, cx| this.run_tool(id, Tool::Traceroute, window, cx))))));
         let saved = d.saved;
