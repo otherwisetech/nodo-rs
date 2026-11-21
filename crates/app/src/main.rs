@@ -8,6 +8,7 @@ mod discovery;
 mod export_ui;
 mod launch;
 mod map_view;
+mod mapfile_ui;
 mod otherwise;
 mod panel;
 mod services_ui;
@@ -71,6 +72,11 @@ pub(crate) fn set_app_menus(cx: &mut App) {
             MenuItem::action(i18n::t!("app.file.new"), NewMap),
             MenuItem::action(i18n::t!("app.file.open"), OpenMap),
             MenuItem::submenu(Menu { name: i18n::t!("app.menu.open_recent").into(), items: recent_items, disabled: false }),
+            MenuItem::separator(),
+            MenuItem::action(i18n::t!("app.file.save_as"), SaveMapAs),
+            MenuItem::action(i18n::t!("app.file.move"), MoveMap),
+            MenuItem::action(i18n::t!("app.file.rename"), RenameMap),
+            MenuItem::action(crate::mapfile_ui::reveal_label(), RevealMap),
             MenuItem::separator(),
             MenuItem::action(i18n::t!("app.menu.import_csv"), ImportCsv),
             MenuItem::action(i18n::t!("app.menu.import_wg"), ImportWgDump),

@@ -54,3 +54,10 @@ core.today.cert_expiring.one = The certificate of {host} expires tomorrow
 core.today.cert_expiring.other = The certificate of {host} expires in {n} days
 core.today.cert_item = SSL {host}
 core.today.track_in_vigia = Track it in Vigía
+
+# map file location
+core.file.same = That is the file the map is already in.
+core.file.no_folder = The folder {path} does not exist.
+core.file.locked = The map is open in Nodo on {host}. Close it there first (or pass --force).
+core.file.io = Could not write the map file: {detail}
+core.file.cloud_other = a cloud-synced folder

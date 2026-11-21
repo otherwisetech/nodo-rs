@@ -116,7 +116,18 @@ for scripts and AI agents.
 - **Maps are files**: *File → New network map…* / *Open…* / *Open Recent*, like a document. A map
   is one SQLite file (rollback journal, no WAL, so it can live in Dropbox, iCloud Drive or a
   Syncthing folder), checked for integrity on open and migrated forward when Nodo's format
-  changes. One map holds as many networks as you like.
+  changes. One map holds as many networks as you like. *Save As…*, *Move Map To…*, *Rename…* and
+  *Show in Finder* put the file where you want it: the copy is made with SQLite's `VACUUM INTO`,
+  checked (`integrity_check`) and reopened before anything else happens, and *Move* deletes the
+  original only after that and after you confirm. New maps are offered in the folder you used
+  last (never a temporary folder). Recent maps that were moved or deleted stay in the list,
+  greyed, with *Locate…*; right-click one to remove it, show it or move it.
+- **Cloud-synced folders** (OneDrive, iCloud Drive, Dropbox, Google Drive, Box, anything under
+  `~/Library/CloudStorage`) are recognised: the map stays one file in short transactions, a small
+  `.<map>.lock` beside it (computer name + a heartbeat every minute, stale after 5 minutes) shows
+  *open in Nodo on another computer* instead of letting two computers edit at once, and conflict
+  copies the sync client leaves next to the map (`… conflicted copy …`, `… 2.nodo`, `… (1).nodo`,
+  OneDrive's `…-ComputerName.nodo`) are offered for review.
 
 ## Privacy
 
@@ -148,6 +159,8 @@ nodo services check                   # run every check now; exit code 1 if one 
 nodo today --json                     # what needs attention: devices / services down, certificates
 nodo sync                             # publish saved devices and sites to the shared registry (if on)
 nodo mcp                              # MCP server on stdio (read-only; --allow-writes adds writes)
+nodo map move "/tmp/Home network.nodo" ~/Library/CloudStorage/OneDrive-Personal/
+                                      # copy, check, then delete the original (refuses while open elsewhere)
 ```
 
 ## Otherwise Apps

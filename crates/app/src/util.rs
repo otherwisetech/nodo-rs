@@ -76,6 +76,50 @@ fn clock_at(secs: i64, now: i64, offset: i32) -> String {
     if a.get(..10) == b.get(..10) { a.get(11..).unwrap_or_default().to_string() } else { a }
 }
 
+/// `/Users/juan/Library/…/Maps/Home network.nodo`: at most `max` characters, keeping the
+/// start and the file name (the parts that tell paths apart).
+pub fn middle_ellipsis(s: &str, max: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= max || max < 5 {
+        return s.to_string();
+    }
+    let keep = max - 1;
+    let tail = (keep * 3 / 5).max(1);
+    let head = keep - tail;
+    let mut out: String = chars[..head].iter().collect();
+    out.push('…'); // i18n-ok: ellipsis
+    out.extend(&chars[chars.len() - tail..]);
+    out
+}
+
+/// The welcome screen's feature columns stack below this window width.
+pub const STACK_BELOW: f32 = 760.;
+
+/// Feature columns side by side, or stacked on a narrow window.
+pub fn stacked(window_width: f32) -> bool {
+    window_width < STACK_BELOW
+}
+
+/// Show the file selected in Finder / Explorer (its folder elsewhere).
+pub fn reveal(path: &std::path::Path) {
+    let mut c = if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("open");
+        c.arg("-R").arg(path);
+        c
+    } else if cfg!(windows) {
+        let mut arg = std::ffi::OsString::from("/select,"); // i18n-ok: argument
+        arg.push(path);
+        let mut c = std::process::Command::new("explorer");
+        c.arg(arg);
+        c
+    } else {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(path.parent().unwrap_or(path));
+        c
+    };
+    let _ = c.spawn();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +136,23 @@ mod tests {
         i18n::set_locale("en");
         assert_eq!(ago(100, 100 + 3 * 86_400), "3 days ago");
         assert_eq!(ago(100, 130), "just now");
+    }
+
+    #[test]
+    fn long_paths_keep_both_ends() {
+        let p = "/private/tmp/claude-501/-Users-juan/c6e84d2e-5f8f-4fc1-8489-b53e9fad09a2/scratchpad/maps/Home network.nodo";
+        let s = middle_ellipsis(p, 60);
+        assert_eq!(s.chars().count(), 60);
+        assert!(s.starts_with("/private/tmp/"));
+        assert!(s.ends_with("maps/Home network.nodo"));
+        assert!(s.contains('…'));
+        assert_eq!(middle_ellipsis("/a/b.nodo", 60), "/a/b.nodo");
+        assert_eq!(middle_ellipsis("ñandú/ñandú/ñandú/ñandú.nodo", 12).chars().count(), 12);
+    }
+
+    #[test]
+    fn welcome_columns_stack_on_narrow_windows() {
+        assert!(stacked(600.));
+        assert!(!stacked(1440.));
     }
 }

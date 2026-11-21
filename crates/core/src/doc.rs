@@ -46,6 +46,16 @@ impl Doc {
         Ok(doc)
     }
 
+    /// Save As: copy the map to `dest` (checked, see [`crate::mapfile::copy_map`]) and carry
+    /// on from there. The old file is left as it is; returns its path.
+    pub fn save_as(&mut self, dest: &Path) -> std::result::Result<std::path::PathBuf, crate::mapfile::FileError> {
+        crate::mapfile::copy_map(&self.store, dest)?;
+        let store = Store::open(dest)?;
+        let old = self.store.path().to_path_buf();
+        self.store = store;
+        Ok(old)
+    }
+
     pub fn title(&self) -> String {
         self.store.path().file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
     }
@@ -263,6 +273,22 @@ impl Doc {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_as_carries_on_from_the_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tmp map.nodo");
+        let mut doc = Doc::create(&path).unwrap();
+        doc.add_manual("Router", Some("192.168.1.1".parse().unwrap()), DeviceKind::Router, 1).unwrap();
+        let dest = dir.path().join("Casa.nodo");
+        assert_eq!(doc.save_as(&dest).unwrap(), path);
+        assert_eq!(doc.store.path(), dest);
+        assert_eq!(doc.title(), "Casa");
+        // later edits land in the new file only
+        doc.add_manual("NAS", None, DeviceKind::Nas, 2).unwrap();
+        assert_eq!(Doc::open(&dest).unwrap().data.devices.len(), 2);
+        assert_eq!(Doc::open(&path).unwrap().data.devices.len(), 1);
+    }
 
     #[test]
     fn apply_import_merge_persist() {

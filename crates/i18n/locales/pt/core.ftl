@@ -54,3 +54,10 @@ core.today.cert_expiring.one = O certificado de {host} expira amanhã
 core.today.cert_expiring.other = O certificado de {host} expira em {n} dias
 core.today.cert_item = SSL {host}
 core.today.track_in_vigia = Acompanhar no Vigía
+
+# map file location
+core.file.same = Esse é o arquivo em que o mapa já está.
+core.file.no_folder = A pasta {path} não existe.
+core.file.locked = O mapa está aberto no Nodo em {host}. Feche-o lá primeiro (ou use --force).
+core.file.io = Não foi possível gravar o arquivo do mapa: {detail}
+core.file.cloud_other = uma pasta sincronizada na nuvem

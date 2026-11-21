@@ -15,7 +15,9 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               positions: radial, by subnet, by network), export.rs (CSV / JSON / Mermaid, CSV
               import), render.rs (scene → SVG / PDF), mac.rs (+ data/oui.tsv.gz), tools.rs
               (ping / traceroute commands), remote.rs (SSH host / user / argv, device env), wol.rs,
-              paths.rs (config dir, recent maps), shell_env.rs, this_computer.rs (which device
+              paths.rs (config dir, recent maps incl. missing ones, default folder),
+              mapfile.rs (safe copy / move via VACUUM INTO + verify, cloud-folder detection,
+              lock file with heartbeat, conflict copies), shell_env.rs, this_computer.rs (which device
               is the computer running Nodo: interfaces, host name, Tailscale node; runtime only; its VM
               bridges), vms.rs (VM / container runtimes running here, guest names), services.rs
               (HTTP(S) / TCP / DNS / ICMP checks, TLS expiry from DER, Tracker state machine,
@@ -23,7 +25,7 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               integration: links.rs (deep-link routes, links into Vigía), feed.rs (Today
               events, live or from the file), sync.rs (devices / sites → shared registry)
 crates/i18n   nodo-i18n: embedded translation catalogs, t!/tn!/tv! macros, i18n guard tests
-crates/cli    `nodo`: list / show / scan / export / maps / today / sync / mcp (mcp.rs: stdio MCP
+crates/cli    `nodo`: list / show / scan / export / maps / map move / today / sync / mcp (mcp.rs: stdio MCP
               server, read-only unless --allow-writes), on the same core
 crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar, footer, About;
               map_view.rs: toolbar, graph canvas (rama's worktree-map approach), list;
@@ -34,6 +36,8 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
               launch.rs: external terminals (from rama); star.rs: GitHub star (from rama);
               services_ui.rs: Status view, service dialog, badges; share_ui.rs: file sharing;
               otherwise.rs: link pump, Today feed of all windows, registry sync, Vigía links
+              mapfile_ui.rs: Save As / Move / Rename / Show in Finder, recent maps' menu,
+              lock heartbeat and the open-elsewhere / conflict-copy notices
 ```
 
 ## Rules
@@ -54,7 +58,9 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
   received name goes through `share::safe_name` / `unique_path`; nothing is sent without a user
   action. Tests run the whole protocol on loopback.
 - **The map file is the user's document.** Every change is written right away (no save step) in
-  small transactions; `journal_mode=DELETE` so it can sit in a synced folder. Schema changes are a
+  small transactions; `journal_mode=DELETE` so it can sit in a synced folder. Never delete or replace a map file
+  except through `mapfile` (copy into a temp file, `Store::verify`, rename; delete the old one only
+  after the copy reopened). Schema changes are a
   new entry at the end of `db::MIGRATIONS` (never edit a shipped one) plus a test in `db.rs`.
   Monitor results are kept in memory; only state changes become events and `last_seen` is written
   at most every 10 minutes per device.

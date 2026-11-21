@@ -5,7 +5,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{Input, InputEvent, InputState};
-use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem};
 use gpui_component::{IconName, Sizable as _, Theme};
 use nodo_core::doc::Doc;
 use nodo_core::graph::{Graph, GraphOpts};
@@ -33,6 +33,10 @@ actions!(
         NewMap,
         OpenMap,
         CloseMap,
+        SaveMapAs,
+        MoveMap,
+        RenameMap,
+        RevealMap,
         ClearRecent,
         ImportCsv,
         ImportWgDump,
@@ -92,6 +96,7 @@ pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("secondary-n", NewMap, Some(CONTEXT)),
         KeyBinding::new("secondary-o", OpenMap, Some(CONTEXT)),
+        KeyBinding::new("secondary-shift-s", SaveMapAs, Some(CONTEXT)),
         KeyBinding::new("secondary-f", FocusSearch, Some(CONTEXT)),
         KeyBinding::new("escape", Escape, Some(CONTEXT)),
         KeyBinding::new("secondary-r", Refresh, Some(CONTEXT)),
@@ -220,7 +225,8 @@ pub struct NodoApp {
     placeholder_locale: &'static str,
     pub terminals: Rc<Vec<crate::launch::Term>>,
     detected: bool,
-    pub recent: Vec<PathBuf>,
+    pub recent: Vec<nodo_core::paths::Recent>,
+    pub file: crate::mapfile_ui::FileState,
     pub share: crate::share_ui::ShareState,
     pub svc: crate::services_ui::SvcUi,
     pub link: crate::otherwise::LinkState,
@@ -231,7 +237,7 @@ impl NodoApp {
     pub fn new(initial: Option<PathBuf>, new_map: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
         sync_theme(Some(window), cx);
         let search = cx.new(|cx| InputState::new(window, cx));
-        let subs = vec![
+        let mut subs = vec![
             window.observe_window_appearance(|window, cx| {
                 sync_theme(Some(window), cx);
                 crate::terminal::panel::sync_style(cx);
@@ -242,6 +248,11 @@ impl NodoApp {
                 _ => {}
             }),
         ];
+        // the lock file says "open on this computer": gone when Nodo quits
+        subs.push(cx.on_app_quit(|this, _| {
+            this.file.lock = None;
+            async {}
+        }));
         let focus = cx.focus_handle();
         focus.focus(window, cx);
         let mut this = NodoApp {
@@ -264,7 +275,8 @@ impl NodoApp {
             placeholder_locale: "",
             terminals: Rc::new(Vec::new()),
             detected: false,
-            recent: nodo_core::paths::recent(),
+            recent: nodo_core::paths::recent_entries(),
+            file: Default::default(),
             share: Default::default(),
             svc: Default::default(),
             link: Default::default(),
@@ -287,7 +299,7 @@ impl NodoApp {
             crate::open_window(None, true, cx);
             return;
         }
-        let dir = documents_dir();
+        let dir = self.save_dir();
         let name = format!("{}.{}", i18n::t!("app.file.default_name"), nodo_core::db::EXTENSION);
         let rx = cx.prompt_for_new_path(&dir, Some(&name));
         cx.spawn_in(window, async move |this, cx| {
@@ -341,7 +353,7 @@ impl NodoApp {
 
     fn loaded(&mut self, doc: Doc, window: &mut Window, cx: &mut Context<Self>) {
         nodo_core::paths::add_recent(doc.store.path());
-        self.recent = nodo_core::paths::recent();
+        self.recent = nodo_core::paths::recent_entries();
         crate::set_app_menus(cx);
         window.set_window_title(&format!("{} — {}", doc.title(), crate::APP_NAME));
         self.doc = Some(doc);
@@ -349,6 +361,7 @@ impl NodoApp {
         self.selected = None;
         self.view.fitted = false;
         self.generation += 1;
+        self.file_opened(cx);
         self.start_monitor(cx);
         // passive discovery is harmless: run it right away, then every few minutes
         self.refresh(cx);
@@ -366,7 +379,8 @@ impl NodoApp {
         self.forget_term_devices();
         self.cache = None;
         self.disc = Default::default();
-        self.recent = nodo_core::paths::recent();
+        self.file = Default::default();
+        self.recent = nodo_core::paths::recent_entries();
         window.set_window_title(crate::APP_NAME);
         cx.notify();
     }
@@ -534,7 +548,7 @@ impl NodoApp {
         cx.notify();
     }
 
-    fn set_language(&mut self, code: &'static str, cx: &mut Context<Self>) {
+    pub(crate) fn set_language(&mut self, code: &'static str, cx: &mut Context<Self>) {
         if i18n::set_locale(code) {
             crate::settings::Settings::update(|s| s.language = Some(code.to_string()));
             gpui_component::set_locale(code);
@@ -707,26 +721,68 @@ impl NodoApp {
         Some((doc.data.devices.iter().filter(|d| d.haystack().contains(&q)).count(), doc.data.devices.len()))
     }
 
-    fn render_welcome(&self, t: &Tokens, cx: &mut Context<Self>) -> impl IntoElement {
-        let recent = self.recent.iter().enumerate().map(|(i, p)| {
-            let p2 = p.clone();
-            let name = p.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string());
-            let hover = t.canvas;
+    fn render_welcome(&self, t: &Tokens, narrow: bool, cx: &mut Context<Self>) -> impl IntoElement {
+        let (muted, accent) = (t.ink_muted, t.accent);
+        let recent: Vec<_> = self
+            .recent
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let (p, exists) = (r.path.clone(), r.exists);
+                let full = r.path.display().to_string();
+                let name = r.path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| full.clone());
+                let shown = crate::util::middle_ellipsis(&full, 72);
+                let tip = if exists { full.clone() } else { i18n::t!("app.recent.missing_tip", path = full.clone()) };
+                let menu = self.recent_menu(r.path.clone(), exists, cx);
+                let hover = t.canvas;
+                div()
+                    .id(("recent", i))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .px(px(12.))
+                    .py(px(8.))
+                    .rounded(px(10.))
+                    .cursor_pointer()
+                    .hover(move |s| s.bg(hover))
+                    .child(div().flex_none().opacity(if exists { 1. } else { 0.5 }).child(ui::logo_mark(15., muted)))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .when(!exists, |d| d.opacity(0.55))
+                            .child(div().min_w_0().truncate().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(name))
+                            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_size(px(11.)).text_color(muted).child(if exists { shown } else { i18n::t!("app.recent.missing", path = shown) })),
+                    )
+                    .when(!exists, |d| d.child(div().flex_none().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(accent).child(i18n::t!("app.recent.locate"))))
+                    .tooltip(move |w, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(w, cx))
+                    .on_click(cx.listener(move |this, _, window, cx| if exists { this.open_path(p.clone(), window, cx) } else { this.locate_recent(p.clone(), window, cx) }))
+                    .context_menu(move |m, window, cx| menu(m, window, cx))
+            })
+            .collect();
+        let feature = |ic: &str, title: String, body: String| {
             div()
-                .id(("recent", i))
                 .flex()
-                .items_center()
                 .gap(px(10.))
-                .px(px(12.))
-                .py(px(8.))
-                .rounded(px(10.))
+                .min_w_0()
+                .when(!narrow, |d| d.flex_1())
+                .child(div().flex_none().pt(px(1.)).child(ui::kind_svg(ic, 18., accent)))
+                .child(div().flex().flex_col().gap(px(2.)).flex_1().min_w_0().child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).child(title)).child(div().text_size(px(12.)).line_height(px(17.)).text_color(muted).child(body)))
+        };
+        let current = i18n::locale();
+        let langs = i18n::available().into_iter().map(|(code, name)| {
+            let on = code == current;
+            div()
+                .id(SharedString::from(format!("welcome-lang-{code}"))) // i18n-ok: element id
                 .cursor_pointer()
-                .hover(move |s| s.bg(hover))
-                .child(ui::logo_mark(15., t.ink_muted))
-                .child(div().flex().flex_col().min_w_0().child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(name)).child(div().text_size(px(11.)).text_color(t.ink_muted).truncate().child(p.display().to_string())))
-                .on_click(cx.listener(move |this, _, window, cx| this.open_path(p2.clone(), window, cx)))
+                .text_color(if on { t.ink } else { muted })
+                .when(on, |d| d.font_weight(FontWeight::SEMIBOLD))
+                .hover(|s| s.underline())
+                .child(name)
+                .on_click(cx.listener(move |this, _, _, cx| this.set_language(code, cx)))
         });
-        let feature = |ic: &str, title: String, body: String| div().flex().gap(px(10.)).w(px(250.)).child(ui::kind_svg(ic, 18., t.accent)).child(div().flex().flex_col().gap(px(2.)).child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).child(title)).child(div().text_size(px(12.)).line_height(px(17.)).text_color(t.ink_muted).child(body)));
         div()
             .id("welcome")
             .relative()
@@ -738,11 +794,14 @@ impl NodoApp {
             .size_full()
             .overflow_y_scroll()
             .py(px(30.))
+            .px(px(16.))
             .child(img(self.logo.clone()).size(px(112.)))
-            .child(div().flex().flex_col().items_center().gap(px(6.)).child(div().text_size(px(26.)).font_weight(FontWeight::SEMIBOLD).child(i18n::t!("app.welcome.title"))).child(div().max_w(px(560.)).text_center().text_size(px(14.)).line_height(px(20.)).text_color(t.ink_muted).child(i18n::t!("app.welcome.subtitle"))))
+            .child(div().flex().flex_col().items_center().gap(px(6.)).w_full().max_w(px(560.)).child(div().text_center().text_size(px(26.)).font_weight(FontWeight::SEMIBOLD).child(i18n::t!("app.welcome.title"))).child(div().text_center().text_size(px(14.)).line_height(px(20.)).text_color(muted).child(i18n::t!("app.welcome.subtitle"))))
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
+                    .justify_center()
                     .gap(px(10.))
                     .child(ui::filled_button(t, "new-big", t.accent).child(icon(IconName::Plus, 15., t.on_fill())).child(i18n::t!("app.file.new")).on_click(cx.listener(|this, _, window, cx| this.new_map_dialog(window, cx))))
                     .child(ui::outline_button(t, "open-big").child(icon(IconName::FolderOpen, 15., t.ink)).child(i18n::t!("app.file.open")).on_click(cx.listener(|this, _, window, cx| this.open_dialog(window, cx)))),
@@ -750,16 +809,17 @@ impl NodoApp {
             .child(
                 div()
                     .flex()
-                    .flex_wrap()
-                    .justify_center()
-                    .max_w(px(820.))
+                    .when(narrow, |d| d.flex_col().max_w(px(460.)))
+                    .when(!narrow, |d| d.max_w(px(860.)))
+                    .w_full()
                     .gap(px(18.))
                     .child(feature("lan", i18n::t!("app.welcome.f_lan"), i18n::t!("app.welcome.f_lan_body")))
                     .child(feature("tailscale", i18n::t!("app.welcome.f_overlay"), i18n::t!("app.welcome.f_overlay_body")))
                     .child(feature("server", i18n::t!("app.welcome.f_monitor"), i18n::t!("app.welcome.f_monitor_body"))),
             )
-            .when(!self.recent.is_empty(), |d| d.child(div().flex().flex_col().w(px(460.)).gap(px(2.)).child(div().px(px(12.)).pb(px(4.)).child(ui::section_title(t, i18n::t!("app.welcome.recent")))).children(recent)))
-            .child(div().max_w(px(520.)).text_center().text_size(px(11.5)).line_height(px(16.)).text_color(t.ink_muted).child(i18n::t!("app.welcome.privacy")))
+            .when(!recent.is_empty(), |d| d.child(div().flex().flex_col().w_full().max_w(px(560.)).gap(px(2.)).child(div().px(px(12.)).pb(px(4.)).child(ui::section_title(t, i18n::t!("app.welcome.recent")))).children(recent)))
+            .child(div().w_full().max_w(px(560.)).text_center().text_size(px(11.5)).line_height(px(16.)).text_color(muted).child(i18n::t!("app.welcome.privacy")))
+            .child(div().flex().flex_wrap().justify_center().items_center().gap(px(12.)).text_size(px(12.)).child(icon(IconName::Globe, 13., muted)).children(langs))
     }
 
     fn render_failed(&self, t: &Tokens, path: &Path, message: &str, cx: &mut Context<Self>) -> impl IntoElement {
@@ -772,8 +832,8 @@ impl NodoApp {
             .size_full()
             .child(icon(IconName::TriangleAlert, 32., t.danger))
             .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(i18n::t!("app.error.title")))
-            .child(div().text_size(px(13.)).text_color(t.ink_muted).child(path.display().to_string()))
-            .child(div().max_w(px(520.)).text_center().text_size(px(13.)).child(message.to_string()))
+            .child(div().max_w(px(600.)).text_size(px(13.)).text_color(t.ink_muted).child(crate::util::middle_ellipsis(&path.display().to_string(), 80)))
+            .child(div().max_w(px(520.)).px(px(16.)).text_center().text_size(px(13.)).child(message.to_string()))
             .child(
                 div()
                     .flex()
@@ -832,6 +892,7 @@ impl NodoApp {
                         None => this.toast(i18n::t!("app.me.not_found"), cx),
                     }))
             }))
+            .children(self.render_cloud_footer())
             .children(self.render_share_footer(t, cx))
             .children(self.render_term_footer(t, cx))
             .children(self.monitor_status(t))
@@ -916,7 +977,10 @@ impl Render for NodoApp {
         self.sync_placeholder(window, cx);
         let t = tokens(cx);
         let body: AnyElement = match &self.phase {
-            Phase::Welcome => self.render_welcome(&t, cx).into_any_element(),
+            Phase::Welcome => {
+                let narrow = crate::util::stacked(f32::from(window.viewport_size().width));
+                self.render_welcome(&t, narrow, cx).into_any_element()
+            }
             Phase::Failed { path, message } => {
                 let (path, message) = (path.clone(), message.clone());
                 self.render_failed(&t, &path, &message, cx).into_any_element()
@@ -924,7 +988,8 @@ impl Render for NodoApp {
             Phase::Ready => {
                 let center = self.render_map(&t, cx);
                 let right = self.render_panel(&t, cx);
-                div().flex().size_full().min_h_0().child(div().flex().flex_col().flex_1().min_w_0().h_full().child(div().flex_1().min_h_0().child(center))).child(right).into_any_element()
+                let notices = self.render_file_notices(&t, cx);
+                div().flex().size_full().min_h_0().child(div().flex().flex_col().flex_1().min_w_0().h_full().children(notices).child(div().flex_1().min_h_0().child(center))).child(right).into_any_element()
             }
         };
         let body = self.render_with_terminal(body, &t, cx);
@@ -933,6 +998,10 @@ impl Render for NodoApp {
             .on_action(cx.listener(|this, _: &NewMap, window, cx| this.new_map_dialog(window, cx)))
             .on_action(cx.listener(|this, _: &OpenMap, window, cx| this.open_dialog(window, cx)))
             .on_action(cx.listener(|this, _: &CloseMap, window, cx| this.close_map(window, cx)))
+            .on_action(cx.listener(|this, _: &SaveMapAs, window, cx| this.relocate_dialog(crate::mapfile_ui::Relocate::Copy, window, cx)))
+            .on_action(cx.listener(|this, _: &MoveMap, window, cx| this.relocate_dialog(crate::mapfile_ui::Relocate::Move, window, cx)))
+            .on_action(cx.listener(|this, _: &RenameMap, window, cx| this.open_rename_map(window, cx)))
+            .on_action(cx.listener(|this, _: &RevealMap, _, cx| this.reveal_map(cx)))
             .on_action(cx.listener(|this, _: &ClearRecent, _, cx| {
                 nodo_core::paths::clear_recent();
                 this.recent.clear();

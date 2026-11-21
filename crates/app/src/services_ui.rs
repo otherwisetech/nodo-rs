@@ -407,8 +407,9 @@ impl NodoApp {
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
                                     .min_w_0()
-                                    .child(div().flex().gap(px(6.)).items_center().child(div().truncate().font_weight(FontWeight::MEDIUM).child(s.name.clone())).child(ui::chip(kind_label(s.spec.kind), t.ink_muted, 10.)).when_some(dev, |d, n| d.child(div().text_size(px(11.)).text_color(t.ink_muted).truncate().child(n))))
+                                    .child(div().flex().gap(px(6.)).items_center().min_w_0().child(div().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(s.name.clone())).child(ui::chip(kind_label(s.spec.kind), t.ink_muted, 10.)).when_some(dev, |d, n| d.child(div().text_size(px(11.)).text_color(t.ink_muted).truncate().child(n))))
                                     .child(div().flex().gap(px(6.)).text_size(px(11.)).text_color(t.ink_muted).child(div().font_family(MONO).truncate().child(s.spec.target.clone())).child(div().truncate().child(detail))),
                             ),
                     )
