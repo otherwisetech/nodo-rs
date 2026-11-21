@@ -32,11 +32,24 @@ pub fn find(devices: &[Device], o: &Observation) -> Option<usize> {
     if let Some((_, i)) = best {
         return Some(i);
     }
-    // 2. the same address on the same layer, unless the identities disagree (IP reassigned)
-    for ip in &o.ips {
-        if let Some(i) = devices.iter().position(|d| d.addrs.iter().any(|a| a.ip == *ip && a.layer == o.layer()) && !conflicts(d, &o.idents)) {
-            return Some(i);
+    // 2. the device holding most of its addresses on the same layer (IPv4 counts most;
+    //    link-local IPv6 like fe80::1 is shared by routers and loopbacks, so it counts least),
+    //    unless the identities disagree (IP reassigned)
+    let weight = |ip: &IpAddr| match ip {
+        IpAddr::V4(_) => 4,
+        // never enough on its own: routers and macOS's loopback both use fe80::1
+        IpAddr::V6(v6) if (v6.segments()[0] & 0xffc0) == 0xfe80 => 0,
+        IpAddr::V6(_) => 2,
+    };
+    let mut best: Option<(u32, usize)> = None;
+    for (i, d) in devices.iter().enumerate() {
+        let score: u32 = o.ips.iter().filter(|ip| d.addrs.iter().any(|a| a.ip == **ip && a.layer == o.layer())).map(weight).sum();
+        if score > 0 && !conflicts(d, &o.idents) && best.is_none_or(|(b, _)| score > b) {
+            best = Some((score, i));
         }
+    }
+    if let Some((_, i)) = best {
+        return Some(i);
     }
     // 3. a host name only one device has (joins a LAN machine with its Tailscale node)
     for id in o.idents.iter().filter(|i| i.kind == IdentKind::Host && !generic_host(&i.value)) {
@@ -49,7 +62,7 @@ pub fn find(devices: &[Device], o: &Observation) -> Option<usize> {
 }
 
 /// Names too common to identify anything.
-fn generic_host(h: &str) -> bool {
+pub(crate) fn generic_host(h: &str) -> bool {
     matches!(h, "" | "localhost" | "raspberrypi" | "android" | "iphone" | "ipad" | "ubuntu" | "debian" | "unknown" | "esp32" | "esp8266" | "router" | "gateway")
 }
 
@@ -155,7 +168,12 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
             _ => map.network_for(ip, layer).or(own.map(|n| n.id)),
         }
     };
-    let idx = match find(&map.devices, o) {
+    let found = find(&map.devices, o);
+    // an address-less record only adds to a device we already know
+    if found.is_none() && o.ips.is_empty() && !matches!(src, Source::Manual | Source::Import) {
+        return;
+    }
+    let idx = match found {
         Some(i) => {
             rep.updated.push(map.devices[i].id);
             i
@@ -168,8 +186,12 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
         }
     };
     let dev_id = map.devices[idx].id;
+    let strong = matches!(src, Source::Tailscale | Source::Aws | Source::WireGuard) || o.idents.iter().any(|i| matches!(i.kind, IdentKind::Mac | IdentKind::TailscaleNode | IdentKind::AwsInstance | IdentKind::WgPeer));
+    // an observation without a hardware identity (mDNS, SSDP, scan) can't prove an address
+    // moved: leave addresses other devices hold alone
+    let ips: Vec<IpAddr> = o.ips.iter().copied().filter(|ip| strong || !map.devices.iter().enumerate().any(|(j, d)| j != idx && d.addrs.iter().any(|a| a.ip == *ip && a.layer == layer))).collect();
     // the same address on the same layer elsewhere belonged to another machine: take it away
-    for ip in &o.ips {
+    for ip in &ips {
         for (j, other) in map.devices.iter_mut().enumerate() {
             if j != idx && other.addrs.iter().any(|a| a.ip == *ip && a.layer == layer) {
                 other.addrs.retain(|a| !(a.ip == *ip && a.layer == layer));
@@ -177,22 +199,22 @@ fn ingest_one(map: &mut MapData, o: &Observation, now: i64, rep: &mut IngestRepo
             }
         }
     }
-    let nets: Vec<Option<NetworkId>> = o.ips.iter().map(|ip| network_of(map, *ip)).collect();
+    let nets: Vec<Option<NetworkId>> = ips.iter().map(|ip| network_of(map, *ip)).collect();
     let d = &mut map.devices[idx];
     // authoritative sources replace the device's addresses on their layer; ARP with a MAC
     // replaces its LAN IPv4 on the same network (DHCP gave it a new one)
     let authoritative = matches!(src, Source::Tailscale | Source::Aws | Source::WireGuard);
     let has_mac = o.idents.iter().any(|i| i.kind == IdentKind::Mac);
     let before: Vec<IpAddr> = d.addrs.iter().filter(|a| a.layer == layer && a.ip.is_ipv4()).map(|a| a.ip).collect();
-    if authoritative && !o.ips.is_empty() {
-        d.addrs.retain(|a| a.layer != layer || o.ips.contains(&a.ip));
+    if authoritative && !ips.is_empty() {
+        d.addrs.retain(|a| a.layer != layer || ips.contains(&a.ip));
     } else if src == Source::Arp && has_mac {
-        let new_v4: Vec<(IpAddr, Option<NetworkId>)> = o.ips.iter().zip(&nets).filter(|(ip, _)| ip.is_ipv4()).map(|(ip, n)| (*ip, *n)).collect();
+        let new_v4: Vec<(IpAddr, Option<NetworkId>)> = ips.iter().zip(&nets).filter(|(ip, _)| ip.is_ipv4()).map(|(ip, n)| (*ip, *n)).collect();
         if !new_v4.is_empty() {
             d.addrs.retain(|a| !(a.layer == layer && a.ip.is_ipv4() && new_v4.iter().any(|(_, n)| *n == a.network) && !new_v4.iter().any(|(ip, _)| *ip == a.ip)));
         }
     }
-    for (ip, net) in o.ips.iter().zip(&nets) {
+    for (ip, net) in ips.iter().zip(&nets) {
         match d.addrs.iter_mut().find(|a| a.ip == *ip && a.layer == layer) {
             Some(a) => {
                 a.last_seen = a.last_seen.max(seen);
@@ -445,6 +467,25 @@ mod tests {
         ingest(&mut m, &Discovery { devices: vec![again], ..Default::default() }, 12);
         let ts_ips: Vec<String> = m.devices[0].addrs.iter().filter(|a| a.layer == Layer::Tailscale).map(|a| a.ip.to_string()).collect();
         assert_eq!(ts_ips, ["100.101.1.33"], "Tailscale is authoritative for its layer");
+    }
+
+    #[test]
+    fn mdns_with_a_shared_link_local_address_joins_the_right_device() {
+        let mut m = MapData::default();
+        // the router answers NDP for fe80::1; this Mac's Bonjour record also lists fe80::1 (lo0)
+        let mut router = arp("192.168.40.1", "2c:0b:ab:61:f6:7e");
+        router.ips.push("fe80::1".parse().unwrap());
+        let mac = arp("192.168.40.7", "00:e0:4c:53:63:88");
+        ingest(&mut m, &Discovery { networks: vec![], devices: vec![router, mac], notes: vec![] }, 1);
+        let mut md = Observation::new(Layer::Lan, Source::Mdns).ident(IdentKind::Mdns, "macbook.local");
+        md.ips = vec!["fe80::1".parse().unwrap(), "192.168.40.7".parse().unwrap(), "192.168.64.1".parse().unwrap()];
+        md.name = Some("MacBook Pro".into());
+        ingest(&mut m, &Discovery { devices: vec![md], ..Default::default() }, 2);
+        assert_eq!(m.devices.len(), 2);
+        assert_eq!(m.devices[1].name, "MacBook Pro", "joined by its IPv4, not the shared link-local");
+        assert!(m.devices[0].ips().any(|i| i.to_string() == "fe80::1"), "the router keeps fe80::1");
+        assert!(!m.devices[1].ips().any(|i| i.to_string() == "fe80::1"), "a MAC-less record can't take it");
+        assert!(m.devices[1].ips().any(|i| i.to_string() == "192.168.64.1"));
     }
 
     #[test]

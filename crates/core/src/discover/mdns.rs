@@ -75,12 +75,17 @@ pub fn to_observations(records: &[Record]) -> Vec<Observation> {
             continue;
         }
         let o = by_host.entry(host.clone()).or_insert_with(|| {
-            let mut o = Observation::new(Layer::Lan, Source::Mdns).ident(IdentKind::Mdns, &host).ident(IdentKind::Host, &host);
-            o.hostname = Some(host.clone());
+            let mut o = Observation::new(Layer::Lan, Source::Mdns);
+            // `localhost.local` and friends name nothing in particular
+            if !crate::identity::generic_host(&crate::model::host_label(&host)) {
+                o = o.ident(IdentKind::Mdns, &host).ident(IdentKind::Host, &host);
+                o.hostname = Some(host.clone());
+            }
             o
         });
         for ip in &r.addresses {
-            if !o.ips.contains(ip) && !ip.is_loopback() {
+            // fe80::1 is macOS's loopback (lo0) as often as a router's address
+            if !o.ips.contains(ip) && !ip.is_loopback() && *ip != IpAddr::V6(std::net::Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)) {
                 o.ips.push(*ip);
             }
         }
@@ -114,7 +119,18 @@ pub fn to_observations(records: &[Record]) -> Vec<Observation> {
             o.kind = crate::discover::classify::from_mdns(&ty);
         }
     }
-    by_host.into_values().filter(|o| !o.ips.is_empty()).collect()
+    // link-local IPv6 (fe80::1 is also macOS's loopback) only when there is nothing better
+    let link_local = |ip: &IpAddr| matches!(ip, IpAddr::V6(v6) if (v6.segments()[0] & 0xffc0) == 0xfe80);
+    by_host
+        .into_values()
+        .map(|mut o| {
+            if o.ips.iter().any(|i| !link_local(i)) {
+                o.ips.retain(|i| !link_local(i));
+            }
+            o
+        })
+        .filter(|o| !o.ips.is_empty() || !o.idents.is_empty())
+        .collect()
 }
 
 /// Browse for `wait`, then stop. Blocking; run it off the UI thread.
@@ -168,9 +184,15 @@ mod tests {
             rec("_ssh._tcp.local.", "juans-macbook._ssh._tcp.local.", "juans-macbook.local.", 22, "fe80::1", &[]),
             rec("_googlecast._tcp.local.", "Chromecast-abc._googlecast._tcp.local.", "abc.local.", 8009, "192.168.1.60", &[("fn", "Living Room TV"), ("md", "Chromecast")]),
             rec("_hap._tcp.local.", "Lamp\\.1._hap._tcp.local.", "", 80, "192.168.1.70", &[]),
+            rec("_airplay._tcp.local.", "TV._airplay._tcp.local.", "localhost.local.", 7000, "192.168.1.60", &[]),
+            rec("_device-info._tcp.local.", "Mac._device-info._tcp.local.", "only-lo.local.", 0, "fe80::1", &[("model", "Mac14,2")]),
         ];
         let o = to_observations(&r);
-        assert_eq!(o.len(), 3, "the record without a host is dropped; one per host");
+        assert_eq!(o.len(), 5, "the record without a host is dropped; one per host");
+        let lo = o.iter().find(|o| o.idents.is_empty()).expect("localhost.local carries no identity");
+        assert_eq!(lo.ips, vec!["192.168.1.60".parse::<IpAddr>().unwrap()]);
+        let only = o.iter().find(|o| o.model.as_deref() == Some("Mac14,2")).unwrap();
+        assert!(only.ips.is_empty(), "fe80::1 is never kept");
         let pr = o.iter().find(|o| o.hostname.as_deref() == Some("brw1234.local")).unwrap();
         assert_eq!(pr.name.as_deref(), Some("Office Printer"));
         assert_eq!(pr.kind, Some(crate::model::DeviceKind::Printer));
@@ -180,7 +202,7 @@ mod tests {
         assert!(pr.idents.iter().any(|i| i.kind == IdentKind::Mdns && i.value == "brw1234.local"));
         let mac = o.iter().find(|o| o.hostname.as_deref() == Some("juans-macbook.local")).unwrap();
         assert_eq!(mac.model.as_deref(), Some("MacBookPro18,3"));
-        assert_eq!(mac.ips.len(), 2);
+        assert_eq!(mac.ips.len(), 1, "link-local dropped when an IPv4 is known");
         let tv = o.iter().find(|o| o.hostname.as_deref() == Some("abc.local")).unwrap();
         assert_eq!(tv.name.as_deref(), Some("Living Room TV"));
         assert_eq!(rec("_hap._tcp.local.", "Lamp\\.1._hap._tcp.local.", "x", 0, "1.1.1.1", &[]).instance(), "Lamp.1");
