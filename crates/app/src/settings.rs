@@ -271,35 +271,63 @@ fn parse_object(s: &str) -> Option<BTreeMap<String, Val>> {
     }
 }
 
-fn system_locale() -> Option<String> {
+/// The system's languages in order of preference: on macOS the Language & Region list
+/// (`AppleLanguages`, what Finder-launched apps should follow; `LANG` is unset there and
+/// `AppleLocale` is the region format, not the language), then `LC_ALL` / `LC_MESSAGES` /
+/// `LANG`, then `AppleLocale`.
+fn system_locales() -> Vec<String> {
+    let mut out = Vec::new();
+    let defaults = |key: &str| std::process::Command::new("defaults").args(["read", "-g", key]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+    if cfg!(target_os = "macos") {
+        out.extend(defaults("AppleLanguages").map(|s| parse_apple_languages(&s)).unwrap_or_default());
+    }
     for var in ["LC_ALL", "LC_MESSAGES", "LANG"] {
         if let Ok(v) = std::env::var(var)
             && !v.is_empty()
             && v != "C"
             && v != "POSIX"
         {
-            return Some(v);
+            out.push(v);
         }
     }
-    if cfg!(target_os = "macos") {
-        let out = std::process::Command::new("defaults").args(["read", "-g", "AppleLocale"]).output().ok()?;
-        let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !v.is_empty() {
-            return Some(v);
-        }
+    if cfg!(target_os = "macos")
+        && let Some(v) = defaults("AppleLocale").map(|s| s.trim().to_string()).filter(|v| !v.is_empty())
+    {
+        out.push(v);
     }
-    None
+    out
 }
 
-/// Saved language, else the system one if bundled, else the default.
+/// `defaults read -g AppleLanguages` → `["en-CO", "es-419"]`.
+pub fn parse_apple_languages(s: &str) -> Vec<String> {
+    s.trim().trim_start_matches('(').trim_end_matches(')').split([',', '\n']).map(|x| x.trim().trim_matches('"').trim().to_string()).filter(|x| !x.is_empty()).collect()
+}
+
+/// The first of `prefs` Nodo has a translation for.
+pub fn pick_language(prefs: &[String]) -> Option<&'static str> {
+    prefs.iter().find_map(|p| i18n::match_system(p))
+}
+
+/// Saved language, else the first bundled one of the system's preferred languages, else the
+/// default.
 pub fn initial_language(settings: &Settings) -> &'static str {
     let saved = settings.language.as_deref().and_then(|l| i18n::available().into_iter().map(|(c, _)| c).find(|c| *c == l));
-    saved.or_else(|| system_locale().as_deref().and_then(i18n::match_system)).unwrap_or(i18n::DEFAULT)
+    saved.or_else(|| pick_language(&system_locales())).unwrap_or(i18n::DEFAULT)
 }
 
 #[cfg(test)]
 mod tests {
     use super::Settings;
+
+    #[test]
+    fn system_language_order() {
+        let l = super::parse_apple_languages("(\n    \"de-DE\",\n    \"es-419\",\n    en\n)\n");
+        assert_eq!(l, ["de-DE", "es-419", "en"]);
+        assert_eq!(super::pick_language(&l), Some("es"));
+        assert_eq!(super::pick_language(&["en-CO".to_string(), "es-419".to_string()]), Some("en"));
+        assert_eq!(super::pick_language(&["pt_BR.UTF-8".to_string()]), Some("pt"));
+        assert_eq!(super::pick_language(&["ja-JP".to_string()]), None);
+    }
 
     #[test]
     fn roundtrip() {

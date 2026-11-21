@@ -54,3 +54,10 @@ core.today.cert_expiring.one = Le certificat de {host} expire demain
 core.today.cert_expiring.other = Le certificat de {host} expire dans {n} jours
 core.today.cert_item = SSL {host}
 core.today.track_in_vigia = Le suivre dans Vigía
+
+# map file location
+core.file.same = C’est déjà le fichier de la carte.
+core.file.no_folder = Le dossier {path} n’existe pas.
+core.file.locked = La carte est ouverte dans Nodo sur {host}. Fermez-la d’abord là-bas (ou utilisez --force).
+core.file.io = Impossible d’écrire le fichier de la carte : {detail}
+core.file.cloud_other = un dossier synchronisé dans le cloud

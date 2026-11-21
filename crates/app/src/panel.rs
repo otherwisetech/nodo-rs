@@ -305,7 +305,7 @@ impl NodoApp {
                 };
                 let color = if matches!(a.kind, AlertKind::Down { .. }) { t.danger } else { t.tag };
                 let hover = t.canvas;
-                s = s.child(div().id(("alert", k)).flex().flex_col().gap(px(1.)).p(px(6.)).rounded(px(6.)).cursor_pointer().hover(move |x| x.bg(hover)).child(div().flex().items_center().gap(px(6.)).text_size(px(12.5)).child(icon(IconName::Bell, 12., color)).child(text)).child(div().text_size(px(11.)).text_color(t.ink_muted).child(crate::util::ago(a.at, now))).on_click(cx.listener(move |this, _, _, cx| {
+                s = s.child(div().id(("alert", k)).flex().flex_col().gap(px(1.)).p(px(6.)).rounded(px(6.)).cursor_pointer().hover(move |x| x.bg(hover)).child(div().flex().items_start().gap(px(6.)).text_size(px(12.5)).child(div().flex_none().pt(px(2.)).child(icon(IconName::Bell, 12., color))).child(div().flex_1().min_w_0().line_height(px(17.)).child(text))).child(div().text_size(px(11.)).text_color(t.ink_muted).child(crate::util::ago(a.at, now))).on_click(cx.listener(move |this, _, _, cx| {
                     this.select_device(id, cx);
                     this.center_on(id);
                 })));
@@ -346,7 +346,7 @@ impl NodoApp {
         let Some(n) = doc.data.network(id) else { return s };
         let kv = |k: String, v: String| div().flex().flex_col().gap(px(2.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(k)).child(div().text_size(px(12.5)).line_height(px(17.)).child(v));
         let devices = doc.data.devices.iter().filter(|d| d.addrs.iter().any(|a| a.network == Some(id))).count();
-        s = s.child(div().flex().items_center().gap(px(8.)).child(div().size(px(10.)).rounded_full().bg(t.layer(n.layer))).child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(self.network_name(n)))).child(ui::chip(layer_label(n.layer), t.layer(n.layer), 11.));
+        s = s.child(div().flex().items_center().gap(px(8.)).child(div().size(px(10.)).flex_none().rounded_full().bg(t.layer(n.layer))).child(div().flex_1().min_w_0().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(self.network_name(n)))).child(ui::chip(layer_label(n.layer), t.layer(n.layer), 11.));
         if let Some(c) = &n.cidr {
             s = s.child(kv(i18n::t!("app.net.cidr"), c.clone()));
         }

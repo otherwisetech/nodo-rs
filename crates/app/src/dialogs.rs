@@ -67,6 +67,12 @@ pub enum Dialog {
     Transfers,
     /// Add or edit a monitored service.
     Service(crate::services_ui::ServiceForm),
+    /// Move: the copy at `new` is checked; delete the original?
+    ConfirmMove { old: std::path::PathBuf, new: std::path::PathBuf },
+    /// Rename the open map's file.
+    RenameMap { name: Entity<InputState> },
+    /// Conflict copies a sync client left next to the map.
+    Conflicts(Vec<std::path::PathBuf>),
 }
 
 /// Title, body, OK label, danger, ready, OK action.
@@ -572,6 +578,20 @@ impl NodoApp {
                     }
                 }
             }
+            Dialog::ConfirmMove { old, new } => {
+                let b = div().flex().flex_col().gap(px(10.)).child(text(i18n::t!("app.file.move_body", new = new.display()))).child(code_block(t, "move-old", old.display().to_string())).child(text(i18n::t!("app.file.move_keep")));
+                (i18n::t!("app.file.move_title"), b.into_any_element(), i18n::t!("app.file.move_ok"), true, true, |this, _, cx| this.confirm_move(cx))
+            }
+            Dialog::RenameMap { name } => (i18n::t!("app.file.rename_title"), div().flex().flex_col().gap(px(8.)).child(Input::new(name)).child(text(i18n::t!("app.file.rename_hint"))).into_any_element(), i18n::t!("app.file.rename_ok"), false, true, |this, window, cx| this.submit_rename_map(window, cx)),
+            Dialog::Conflicts(list) => (i18n::t!("app.file.conflicts_title"), self.conflicts_body(list, t, cx), i18n::t!("app.file.reveal_folder"), false, true, |this, _, cx| {
+                if let Some(Dialog::Conflicts(list)) = this.dialog.take() {
+                    this.file.conflicts_seen = list.clone();
+                    if let Some(p) = list.first() {
+                        crate::util::reveal(p);
+                    }
+                }
+                cx.notify();
+            }),
             Dialog::Service(f) => (if f.id == 0 { i18n::t!("app.svc.add_title") } else { i18n::t!("app.svc.edit_title") }, self.service_form(f, t, cx), i18n::t!("app.dialog.save"), false, true, |this, _, cx| this.save_service(cx)),
             Dialog::Transfers => {
                 let h = crate::share_ui::history();

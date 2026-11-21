@@ -233,6 +233,28 @@ impl Store {
         &self.path
     }
 
+    /// A consistent, compacted copy of the open map at `dest` (`VACUUM INTO`; `dest` must not
+    /// exist). Header fields (application id, schema version) come along.
+    pub fn copy_into(&self, dest: &Path) -> Result<()> {
+        self.conn.execute("VACUUM INTO ?1", [dest.to_string_lossy()])?;
+        Ok(())
+    }
+
+    /// `delete` for a map opened read / write (never WAL: the map must stay one file).
+    pub fn journal_mode(&self) -> Result<String> {
+        Ok(self.conn.query_row("PRAGMA journal_mode", [], |r| r.get(0))?)
+    }
+
+    /// Without changing it: is the file at `path` a whole, readable Nodo map?
+    pub fn verify(path: &Path) -> Result<()> {
+        let s = Store::open_read_only(path)?;
+        let check: String = s.conn.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
+        if check != "ok" {
+            return Err(StoreError::Corrupt(check));
+        }
+        Ok(())
+    }
+
     fn configure(&mut self) -> Result<()> {
         // a single file (plus a short-lived -journal) plays well with Dropbox / iCloud / Syncthing
         self.conn.pragma_update(None, "journal_mode", "DELETE")?;
@@ -525,7 +547,7 @@ impl Store {
     }
 }
 
-fn journal(p: &Path) -> PathBuf {
+pub(crate) fn journal(p: &Path) -> PathBuf {
     let mut s = p.as_os_str().to_os_string();
     s.push("-journal");
     PathBuf::from(s)

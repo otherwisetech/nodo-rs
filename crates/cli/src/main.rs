@@ -376,6 +376,23 @@ fn cmd_export(a: &Args) -> Result<(), String> {
     }
 }
 
+/// `nodo map move <from> <to> [--force]`
+fn cmd_map(a: &Args) -> Result<(), String> {
+    let (Some("move"), Some(from), Some(to)) = (a.rest.first().map(String::as_str), a.rest.get(1), a.rest.get(2)) else { return Err(i18n::t!("cli.map.needs")) };
+    let (from, mut to) = (PathBuf::from(from), PathBuf::from(to));
+    if to.is_dir() {
+        to = to.join(from.file_name().unwrap_or_default());
+    }
+    if to.extension().is_none() {
+        to.set_extension(nodo_core::db::EXTENSION);
+    }
+    let host = nodo_core::discover::hostname().unwrap_or_default();
+    nodo_core::mapfile::move_file(&from, &to, &host, nodo_core::time::now(), a.flags.iter().any(|f| f == "force")).map_err(|e| e.to_string())?;
+    nodo_core::paths::replace_recent(&from, &to);
+    println!("{}", i18n::t!("cli.map.moved", from = from.display(), to = to.display()));
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let lang = std::env::var("LC_ALL").ok().or_else(|| std::env::var("LANG").ok()).and_then(|l| i18n::match_system(&l)).unwrap_or("en");
     i18n::set_locale(lang);
@@ -396,6 +413,7 @@ fn main() -> ExitCode {
         "today" => cmd_today(&a),
         "sync" => cmd_sync(&a),
         "mcp" => cmd_mcp(&a),
+        "map" => cmd_map(&a),
         "maps" => {
             for p in nodo_core::paths::recent() {
                 println!("{}", p.display());

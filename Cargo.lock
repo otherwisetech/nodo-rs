@@ -4058,7 +4058,7 @@ dependencies = [
 
 [[package]]
 name = "nodo-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -4080,7 +4080,7 @@ dependencies = [
 
 [[package]]
 name = "nodo-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "nodo-core",
  "nodo-i18n",
@@ -4092,7 +4092,7 @@ dependencies = [
 
 [[package]]
 name = "nodo-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "flate2",
  "libc",
@@ -4112,7 +4112,7 @@ dependencies = [
 
 [[package]]
 name = "nodo-i18n"
-version = "0.2.0"
+version = "0.2.1"
 
 [[package]]
 name = "nohash-hasher"

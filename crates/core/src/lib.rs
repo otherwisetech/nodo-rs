@@ -2,6 +2,7 @@
 //!
 //! - [`model`]: networks, devices, identities, observations
 //! - [`db`] / [`doc`]: the map file (SQLite) and the open map
+//! - [`mapfile`]: safe copy / move, cloud-sync folders, the lock file, conflict copies
 //! - [`discover`]: passive (neighbour table, mDNS, SSDP) and on-request sources (subnet scan,
 //!   Tailscale, AWS, WireGuard), each a parser tested on fixtures plus a thin runner
 //! - [`identity`]: observations → devices, merge / split
@@ -21,6 +22,7 @@ pub mod identity;
 pub mod layout;
 pub mod links;
 pub mod mac;
+pub mod mapfile;
 pub mod model;
 pub mod monitor;
 pub mod paths;
