@@ -26,11 +26,13 @@ use gpui_component_assets::Assets;
 use std::borrow::Cow;
 use std::path::PathBuf;
 
-actions!(nodo, [Quit, OpenWebsite]);
+actions!(nodo, [Quit, OpenWebsite, OpenVcity]);
 
 pub(crate) const APP_NAME: &str = "Nodo"; // i18n-ok: product name
 pub(crate) const COMPANY: &str = "Otherwise Technologies LLC"; // i18n-ok: company name
 pub(crate) const COMPANY_URL: &str = "https://otherwisetech.com";
+/// The invitation to Vcity (About and the Help menu).
+pub(crate) const VCITY_URL: &str = "https://vcity.io/?utm_source=nodo&utm_medium=app&utm_campaign=otherwise-apps";
 pub(crate) const REPO_URL: &str = "https://github.com/otherwisetech/nodo-rs";
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -130,7 +132,8 @@ pub(crate) fn set_app_menus(cx: &mut App) {
         ],
         disabled: false,
     };
-    cx.set_menus(vec![app_menu, file, view, discover]);
+    let help = Menu { name: i18n::t!("app.menu.help").into(), items: vec![MenuItem::action(i18n::t!("app.vcity.menu"), OpenVcity)], disabled: false };
+    cx.set_menus(vec![app_menu, file, view, discover, help]);
 }
 
 /// gpui-component's icon set plus our own `icons/…`.
@@ -233,6 +236,7 @@ fn main() {
         cx.bind_keys([KeyBinding::new("secondary-q", Quit, None)]);
         cx.on_action(|_: &Quit, cx| cx.quit());
         cx.on_action(|_: &OpenWebsite, cx| cx.open_url(COMPANY_URL));
+        cx.on_action(|_: &OpenVcity, cx| cx.open_url(VCITY_URL));
         // with no window focused (all closed on Linux/Windows never happens: we quit)
         cx.on_action(|_: &app::NewMap, cx| open_window(None, true, cx));
         gpui_component::set_locale(i18n::locale());

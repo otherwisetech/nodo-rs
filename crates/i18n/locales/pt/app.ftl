@@ -535,3 +535,7 @@ app.recent.move = Mover…
 app.recent.remove = Remover da lista
 app.recent.missing = Não encontrado: {path}
 app.recent.missing_tip = {path} foi movido ou apagado. Clique para localizá-lo.
+# Vcity
+app.menu.help = Ajuda
+app.vcity.menu = Crie sua loja na Vcity
+app.vcity.invite = Vende produtos ou serviços? Crie a loja virtual da sua empresa na Vcity: catálogo, pedidos, pagamentos, reservas, chat com clientes e muito mais.
