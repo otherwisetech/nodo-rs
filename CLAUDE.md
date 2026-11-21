@@ -14,13 +14,16 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               monitor.rs (pure state machine + Engine thread), graph.rs + layout.rs (tree and
               positions: radial, by subnet, by network), export.rs (CSV / JSON / Mermaid, CSV
               import), render.rs (scene → SVG / PDF), mac.rs (+ data/oui.tsv.gz), tools.rs
-              (ping / traceroute output), wol.rs, paths.rs (config dir, recent maps), shell_env.rs
+              (ping / traceroute commands), remote.rs (SSH host / user / argv, device env), wol.rs,
+              paths.rs (config dir, recent maps), shell_env.rs
 crates/i18n   nodo-i18n: embedded translation catalogs, t!/tn!/tv! macros, i18n guard tests
 crates/cli    `nodo`: list / show / scan / export / maps, on the same core
 crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar, footer, About;
               map_view.rs: toolbar, graph canvas (rama's worktree-map approach), list;
-              panel.rs: side panel, quick actions, edit form, tool output; discovery.rs: background
+              panel.rs: side panel, quick actions, edit form; discovery.rs: background
               discovery, monitor engine polling, alerts, notifications; dialogs.rs; export_ui.rs;
+              terminal/: embedded terminal (from plate: alacritty_terminal model, GPUI view, keys,
+              colours; state.rs = pure dock / tab state; panel.rs = dock UI + SSH / ping tabs);
               launch.rs: external terminals (from rama); star.rs: GitHub star (from rama)
 ```
 
@@ -54,7 +57,8 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
   tools, paths or locale.
 - In app test modules don't `use super::*` (gpui's glob exports its own `test` attribute).
 - External terminals get the exact command line shown before its first run (remembered per
-  terminal + command in settings).
+  terminal + command in settings). Embedded tabs run `ssh` / `ping` with an argument list, never
+  through a shell; `remote::ssh_argv` rejects users / hosts that could become options.
 - Comments: sparse, only non-obvious why.
 - GPUI pins: `Cargo.lock` pins zed `eb5483528be607b497afdaad0a237bebeb191249` and gpui-component
   `972a3ebfd01afca7da6d8b6f31c9a51288ea5565`, as in rama-rs. Never `cargo update` them.

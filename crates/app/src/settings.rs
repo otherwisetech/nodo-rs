@@ -23,6 +23,15 @@ pub struct Settings {
     pub notify: Option<String>,
     /// `"off"`: no passive refresh every few minutes while a map is open.
     pub auto_refresh: Option<String>,
+    /// Embedded terminal panel: `bottom` / `right`, sizes in px, `on` when collapsed to a bar.
+    pub term_dock: Option<String>,
+    pub term_bottom: Option<String>,
+    pub term_right: Option<String>,
+    pub term_collapsed: Option<String>,
+    /// Font size in pt.
+    pub term_font: Option<String>,
+    /// `external`: device actions open the terminal app instead of a tab.
+    pub term_prefer: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,11 +93,17 @@ impl Settings {
             github_stars: st("github_stars"),
             notify: st("notify"),
             auto_refresh: st("auto_refresh"),
+            term_dock: st("term_dock"),
+            term_bottom: st("term_bottom"),
+            term_right: st("term_right"),
+            term_collapsed: st("term_collapsed"),
+            term_font: st("term_font"),
+            term_prefer: st("term_prefer"),
         }
     }
 
     fn to_json(&self) -> String {
-        let strings = [("language", &self.language), ("view", &self.view), ("layout", &self.layout), ("terminal", &self.terminal), ("github_stars", &self.github_stars), ("notify", &self.notify), ("auto_refresh", &self.auto_refresh)];
+        let strings = [("language", &self.language), ("view", &self.view), ("layout", &self.layout), ("terminal", &self.terminal), ("github_stars", &self.github_stars), ("notify", &self.notify), ("auto_refresh", &self.auto_refresh), ("term_dock", &self.term_dock), ("term_bottom", &self.term_bottom), ("term_right", &self.term_right), ("term_collapsed", &self.term_collapsed), ("term_font", &self.term_font), ("term_prefer", &self.term_prefer)];
         let lists = [("hidden_layers", &self.hidden_layers), ("launch_ok", &self.launch_ok)];
         let mut fields: Vec<String> = strings.iter().filter_map(|(k, v)| v.as_ref().map(|v| format!("  \"{k}\": {}", quote(v)))).collect();
         fields.extend(lists.iter().filter(|(_, v)| !v.is_empty()).map(|(k, v)| format!("  \"{k}\": [{}]", v.iter().map(|x| quote(x)).collect::<Vec<_>>().join(", "))));
@@ -105,6 +120,10 @@ impl Settings {
 
     pub fn auto_refresh(&self) -> bool {
         self.auto_refresh.as_deref() != Some("off")
+    }
+
+    pub fn term_font(&self) -> f32 {
+        self.term_font.as_deref().and_then(|v| v.parse::<f32>().ok()).filter(|v| v.is_finite()).unwrap_or(crate::terminal::FONT_DEFAULT).clamp(crate::terminal::FONT_MIN, crate::terminal::FONT_MAX)
     }
 }
 
@@ -252,12 +271,21 @@ mod tests {
             github_stars: Some("off".into()),
             notify: Some("off".into()),
             auto_refresh: Some("off".into()),
+            term_dock: Some("right".into()),
+            term_bottom: Some("320".into()),
+            term_right: Some("600".into()),
+            term_collapsed: Some("on".into()),
+            term_font: Some("14".into()),
+            term_prefer: Some("external".into()),
         };
         assert_eq!(Settings::parse(&s.to_json()), s);
         assert!(!s.github_stars() && Settings::default().github_stars());
         assert!(!s.notify() && Settings::default().notify());
         assert!(!s.auto_refresh() && Settings::default().auto_refresh());
         assert_eq!(Settings::parse(&Settings::default().to_json()), Settings::default());
+        assert_eq!(s.term_font(), 14.);
+        assert_eq!(Settings { term_font: Some("200".into()), ..Default::default() }.term_font(), crate::terminal::FONT_MAX);
+        assert_eq!(Settings::default().term_font(), crate::terminal::FONT_DEFAULT);
         assert_eq!(Settings::parse("garbage"), Settings::default());
         assert_eq!(Settings::parse("{\n  \"language\": \"fr\"\n}\n").language.as_deref(), Some("fr"));
     }

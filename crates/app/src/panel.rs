@@ -1,6 +1,5 @@
 //! Side panel: the selected device (status, addresses, identities, services, inventory, quick
-//! actions, history) or network, or the map's summary and alerts; the inline edit form; and the
-//! ping / traceroute output panel under the map.
+//! actions, history) or network, or the map's summary and alerts; and the inline edit form.
 use crate::app::{NodoApp, Sel};
 use crate::dialogs::Dialog;
 use crate::discovery::AlertKind;
@@ -12,7 +11,6 @@ use gpui::*;
 use gpui_component::button::Button;
 use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_component::spinner::Spinner;
 use gpui_component::{IconName, Sizable as _};
 use nodo_core::model::{Device, DeviceId, DeviceKind, EventKind, IdentKind, Layer, Link, Source};
 use nodo_core::tools::Tool;
@@ -27,16 +25,10 @@ pub struct EditForm {
     pub owner: Entity<InputState>,
     pub location: Entity<InputState>,
     pub tags: Entity<InputState>,
+    pub ssh_user: Entity<InputState>,
     pub links: Entity<TextareaState>,
     pub fields: Entity<TextareaState>,
     pub notes: Entity<TextareaState>,
-}
-
-pub struct Output {
-    pub title: String,
-    pub command: String,
-    pub lines: Vec<String>,
-    pub running: Option<nodo_core::tools::Running>,
 }
 
 /// `label url` per line (or just a URL) → links.
@@ -121,17 +113,6 @@ impl NodoApp {
 
     // ── quick actions ────────────────────────────────────────────────────────────────────────
 
-    pub fn ssh(&mut self, id: DeviceId, cx: &mut Context<Self>) {
-        let Some(d) = self.device(id) else { return };
-        let Some(ip) = d.primary_ip() else { return };
-        let user = d.fields.iter().find(|(k, _)| k.eq_ignore_ascii_case("ssh user") || k.eq_ignore_ascii_case("ssh_user")).map(|(_, v)| v.clone());
-        let host = match user {
-            Some(u) if !u.is_empty() => format!("{u}@{ip}"),
-            _ => ip.to_string(),
-        };
-        self.launch(format!("ssh {host}"), cx); // i18n-ok: command line
-    }
-
     /// Open the user's terminal running `command`; the exact command line is shown the first
     /// time a terminal + command pair is used.
     pub fn launch(&mut self, command: String, cx: &mut Context<Self>) {
@@ -202,56 +183,6 @@ impl NodoApp {
         }
     }
 
-    pub fn run_tool(&mut self, id: DeviceId, tool: Tool, cx: &mut Context<Self>) {
-        let Some(ip) = self.ip_of(id) else { return };
-        if let Some(o) = &self.output
-            && let Some(r) = &o.running
-        {
-            r.stop();
-        }
-        let (program, args) = nodo_core::tools::command(tool, ip);
-        let title = match tool {
-            Tool::Ping => i18n::t!("app.action.ping"),
-            Tool::Traceroute => i18n::t!("app.action.traceroute"),
-        };
-        match nodo_core::tools::spawn(tool, ip) {
-            Ok(r) => {
-                self.output = Some(Output { title, command: nodo_core::tools::display(&program, &args), lines: Vec::new(), running: Some(r) });
-                cx.spawn(async move |this, cx| {
-                    loop {
-                        cx.background_executor().timer(std::time::Duration::from_millis(150)).await;
-                        let go = this.update(cx, |this, cx| {
-                            let Some(o) = this.output.as_mut() else { return false };
-                            let Some(r) = &o.running else { return false };
-                            let mut done = false;
-                            loop {
-                                match r.lines.try_recv() {
-                                    Ok(l) => o.lines.push(l),
-                                    Err(std::sync::mpsc::TryRecvError::Empty) => break,
-                                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                                        done = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if done {
-                                o.running = None;
-                            }
-                            cx.notify();
-                            !done
-                        });
-                        if !matches!(go, Ok(true)) {
-                            break;
-                        }
-                    }
-                })
-                .detach();
-            }
-            Err(e) => self.toast(i18n::t!("app.launch.failed", detail = e), cx),
-        }
-        cx.notify();
-    }
-
     pub fn toggle_saved(&mut self, id: DeviceId, cx: &mut Context<Self>) {
         let Some(mut d) = self.device(id).cloned() else { return };
         d.saved = !d.saved;
@@ -280,7 +211,7 @@ impl NodoApp {
         let mk = |v: String, window: &mut Window, cx: &mut Context<Self>| cx.new(|cx| InputState::new(window, cx).default_value(v));
         let area = |v: String, ph: String, window: &mut Window, cx: &mut Context<Self>| cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8).placeholder(ph).default_value(v));
         let links = d.links.iter().map(|l| if l.label.is_empty() { l.url.clone() } else { format!("{} {}", l.label, l.url) }).collect::<Vec<_>>().join("\n");
-        let fields = d.fields.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join("\n");
+        let fields = d.fields.iter().filter(|(k, _)| !nodo_core::remote::is_user_field(k)).map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join("\n");
         let name = mk(d.name.clone(), window, cx);
         name.update(cx, |s, cx| s.focus(window, cx));
         self.edit = Some(EditForm {
@@ -290,6 +221,7 @@ impl NodoApp {
             owner: mk(d.owner.clone(), window, cx),
             location: mk(d.location.clone(), window, cx),
             tags: mk(d.tags.join(", "), window, cx),
+            ssh_user: cx.new(|cx| InputState::new(window, cx).placeholder(i18n::t!("app.edit.ssh_user_ph")).default_value(nodo_core::remote::ssh_user(&d).unwrap_or_default())),
             links: area(links, i18n::t!("app.edit.links_ph"), window, cx),
             fields: area(fields, i18n::t!("app.edit.fields_ph"), window, cx),
             notes: area(d.notes.clone(), String::new(), window, cx),
@@ -314,7 +246,8 @@ impl NodoApp {
         d.location = val(&f.location);
         d.tags = val(&f.tags).split(',').map(str::trim).filter(|t| !t.is_empty()).map(str::to_string).collect();
         d.links = parse_links(&f.links.read(cx).value());
-        d.fields = parse_fields(&f.fields.read(cx).value());
+        d.fields = parse_fields(&f.fields.read(cx).value()).into_iter().filter(|(k, _)| !nodo_core::remote::is_user_field(k)).collect();
+        nodo_core::remote::set_ssh_user(&mut d.fields, &val(&f.ssh_user));
         d.notes = f.notes.read(cx).value().trim().to_string();
         d.saved = true;
         if let Some(doc) = self.doc.as_mut() {
@@ -536,9 +469,9 @@ impl NodoApp {
         let row = || div().flex().gap(px(6.));
         let mut actions = div().flex().flex_col().gap(px(6.)).p(px(16.)).border_b_1().border_color(t.border);
         actions = actions
-            .child(row().child(act("a-ssh", IconName::SquareTerminal, i18n::t!("app.action.ssh_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.ssh(id, cx))))).child(act("a-web", IconName::Globe, i18n::t!("app.action.web_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.open_web(id, cx))))).child(act("a-vnc", IconName::Frame, i18n::t!("app.action.vnc_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.open_vnc(id, cx))))))
+            .child(row().child(act("a-ssh", IconName::SquareTerminal, i18n::t!("app.action.ssh_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, window, cx| this.ssh(id, window, cx))))).child(act("a-web", IconName::Globe, i18n::t!("app.action.web_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.open_web(id, cx))))).child(act("a-vnc", IconName::Frame, i18n::t!("app.action.vnc_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.open_vnc(id, cx))))))
             .child(row().child(act("a-ip", IconName::Copy, i18n::t!("app.action.copy_ip_short"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.copy_ip(id, cx))))).child(act("a-mac", IconName::Copy, i18n::t!("app.action.copy_mac_short"), has_mac).when(has_mac, |b| b.on_click(cx.listener(move |this, _, _, cx| this.copy_mac(id, cx))))).child(act("a-wol", IconName::Sun, i18n::t!("app.action.wake_short"), has_mac).when(has_mac, |b| b.on_click(cx.listener(move |this, _, _, cx| this.wake(id, cx))))))
-            .child(row().child(act("a-ping", IconName::Inspector, i18n::t!("app.action.ping"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.run_tool(id, Tool::Ping, cx))))).child(act("a-trace", IconName::Map, i18n::t!("app.action.traceroute"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, _, cx| this.run_tool(id, Tool::Traceroute, cx))))));
+            .child(row().child(act("a-ping", IconName::Inspector, i18n::t!("app.action.ping"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, window, cx| this.run_tool(id, Tool::Ping, window, cx))))).child(act("a-trace", IconName::Map, i18n::t!("app.action.traceroute"), has_ip).when(has_ip, |b| b.on_click(cx.listener(move |this, _, window, cx| this.run_tool(id, Tool::Traceroute, window, cx))))));
         let saved = d.saved;
         let monitored = d.monitor;
         let weak = cx.entity().downgrade();
@@ -549,7 +482,10 @@ impl NodoApp {
                     w.update(cx, |this, cx| f(this, id, window, cx)).ok();
                 })
             };
-            menu.item(item(if monitored { i18n::t!("app.action.unmonitor") } else { i18n::t!("app.action.monitor") }, |this, id, _, cx| this.toggle_device_monitor(id, cx)))
+            menu.item(item(i18n::t!("app.action.shell_here"), |this, id, window, cx| this.shell_here(id, window, cx)))
+                .item(item(i18n::t!("app.action.ssh_external"), |this, id, _, cx| this.ssh_external(id, cx)))
+                .separator()
+                .item(item(if monitored { i18n::t!("app.action.unmonitor") } else { i18n::t!("app.action.monitor") }, |this, id, _, cx| this.toggle_device_monitor(id, cx)))
                 .item(item(i18n::t!("app.action.merge"), |this, id, window, cx| this.open_merge(id, window, cx)))
                 .item(item(i18n::t!("app.action.split"), |this, id, _, cx| this.open_split(id, cx)))
                 .separator()
@@ -612,6 +548,7 @@ impl NodoApp {
             .child(field(i18n::t!("app.edit.owner"), &f.owner))
             .child(field(i18n::t!("app.edit.location"), &f.location))
             .child(field(i18n::t!("app.edit.tags"), &f.tags))
+            .child(field(i18n::t!("app.edit.ssh_user"), &f.ssh_user))
             .child(area(i18n::t!("app.edit.links"), &f.links))
             .child(area(i18n::t!("app.edit.fields"), &f.fields))
             .child(area(i18n::t!("app.edit.notes"), &f.notes))
@@ -627,41 +564,6 @@ impl NodoApp {
                     })))
                     .child(ui::filled_button(t, "edit-save", t.accent).child(i18n::t!("app.dialog.save")).on_click(cx.listener(|this, _, _, cx| this.save_edit(cx)))),
             )
-    }
-
-    pub(crate) fn render_output(&self, t: &Tokens, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let o = self.output.as_ref()?;
-        let bar = div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .gap(px(8.))
-            .h(px(32.))
-            .px(px(10.))
-            .border_t_1()
-            .border_color(t.border)
-            .bg(t.surface)
-            .text_size(px(12.))
-            .child(icon(IconName::SquareTerminal, 14., t.ink_muted))
-            .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(o.title.clone()))
-            .child(div().flex_1().min_w_0().truncate().font_family(MONO).text_size(px(11.5)).text_color(t.ink_muted).child(o.command.clone()))
-            .when(o.running.is_some(), |d| {
-                d.child(Spinner::new().small().color(t.accent)).child(ui::outline_button(t, "tool-stop").h(px(24.)).px(px(8.)).text_size(px(12.)).child(i18n::t!("app.output.stop")).on_click(cx.listener(|this, _, _, cx| {
-                    if let Some(r) = this.output.as_ref().and_then(|o| o.running.as_ref()) {
-                        r.stop();
-                    }
-                    cx.notify();
-                })))
-            })
-            .child(ui::icon_button(t, "tool-close", IconName::Close, true).size(px(24.)).on_click(cx.listener(|this, _, _, cx| {
-                if let Some(r) = this.output.as_ref().and_then(|o| o.running.as_ref()) {
-                    r.stop();
-                }
-                this.output = None;
-                cx.notify();
-            })));
-        let body = div().id("tool-out").h(px(180.)).overflow_y_scroll().p(px(10.)).bg(t.canvas).font_family(MONO).text_size(px(11.5)).line_height(px(16.)).children(o.lines.iter().map(|l| div().child(l.clone())));
-        Some(div().flex().flex_col().flex_none().child(bar).child(body).into_any_element())
     }
 }
 

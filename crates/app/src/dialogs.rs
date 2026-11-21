@@ -32,6 +32,9 @@ pub struct SettingsForm {
     pub auto_refresh: bool,
     pub stars: bool,
     pub terminal: Option<String>,
+    pub term_prefer: crate::terminal::state::Prefer,
+    pub term_dock: crate::terminal::state::Dock,
+    pub term_font: Entity<InputState>,
 }
 
 pub struct AddForm {
@@ -101,7 +104,10 @@ impl NodoApp {
         let mk = |v: String, window: &mut Window, cx: &mut Context<Self>| cx.new(|cx| InputState::new(window, cx).default_value(v));
         let interval = mk(cfg.interval.as_secs().to_string(), window, cx);
         let down_minutes = mk((cfg.down_after.as_secs() / 60).to_string(), window, cx);
-        self.dialog = Some(Dialog::Settings(SettingsForm { interval, down_minutes, alert_down: cfg.alert_down, alert_new: cfg.alert_new, notify: s.notify(), auto_refresh: s.auto_refresh(), stars: s.github_stars(), terminal: s.terminal.clone() }));
+        let term_font = mk(format!("{}", s.term_font()), window, cx);
+        let term_prefer = crate::terminal::state::Prefer::parse(s.term_prefer.as_deref());
+        let term_dock = self.term.layout.dock;
+        self.dialog = Some(Dialog::Settings(SettingsForm { interval, down_minutes, alert_down: cfg.alert_down, alert_new: cfg.alert_new, notify: s.notify(), auto_refresh: s.auto_refresh(), stars: s.github_stars(), terminal: s.terminal.clone(), term_prefer, term_dock, term_font }));
         cx.notify();
     }
 
@@ -121,7 +127,15 @@ impl NodoApp {
             s.notify = (!f.notify).then(|| "off".into()); // i18n-ok: setting value
             s.auto_refresh = (!f.auto_refresh).then(|| "off".into()); // i18n-ok: setting value
             s.terminal = f.terminal.clone();
+            s.term_prefer = f.term_prefer.id();
+            s.term_font = f.term_font.read(cx).value().trim().replace(',', ".").parse::<f32>().ok().map(|v| format!("{}", v.clamp(crate::terminal::FONT_MIN, crate::terminal::FONT_MAX)));
         });
+        if self.term.layout.dock != f.term_dock {
+            self.term.layout.dock = f.term_dock;
+            let l = self.term.layout.clone();
+            crate::settings::Settings::update(|s| l.store(s));
+        }
+        crate::terminal::panel::sync_style(cx);
         if stars_changed {
             self.set_github_stars(f.stars, cx);
         }
@@ -381,7 +395,34 @@ impl NodoApp {
                     .child(check("set-auto", i18n::t!("app.settings.auto_refresh"), f.auto_refresh, |f, v| f.auto_refresh = v))
                     .child(check("set-stars", i18n::t!("app.star.setting"), f.stars, |f, v| f.stars = v))
                     .child(hint(i18n::t!("app.star.setting_hint")))
+                    .child(ui::section_title(t, i18n::t!("app.settings.term_section")))
+                    .child(div().flex().items_center().gap(px(8.)).child(label(i18n::t!("app.settings.term_prefer"))).child({
+                        use crate::terminal::state::Prefer;
+                        let pick = |id: &'static str, l: String, p: Prefer| {
+                            ui::seg(t, id, l, f.term_prefer == p).on_click(cx.listener(move |this, _, _, cx| {
+                                if let Some(Dialog::Settings(f)) = this.dialog.as_mut() {
+                                    f.term_prefer = p;
+                                }
+                                cx.notify();
+                            }))
+                        };
+                        ui::seg_group(t).child(pick("set-term-in", i18n::t!("app.settings.term_embedded"), Prefer::Embedded)).child(pick("set-term-ext", i18n::t!("app.settings.term_external"), Prefer::External))
+                    }))
+                    .child(div().flex().items_center().gap(px(8.)).child(label(i18n::t!("app.settings.term_dock"))).child({
+                        use crate::terminal::state::Dock;
+                        let pick = |id: &'static str, l: String, d: Dock| {
+                            ui::seg(t, id, l, f.term_dock == d).on_click(cx.listener(move |this, _, _, cx| {
+                                if let Some(Dialog::Settings(f)) = this.dialog.as_mut() {
+                                    f.term_dock = d;
+                                }
+                                cx.notify();
+                            }))
+                        };
+                        ui::seg_group(t).child(pick("set-dock-b", i18n::t!("app.term.dock_bottom"), Dock::Bottom)).child(pick("set-dock-r", i18n::t!("app.term.dock_right"), Dock::Right))
+                    }))
+                    .child(div().flex().items_center().gap(px(8.)).child(label(i18n::t!("app.settings.term_font"))).child(div().w(px(80.)).child(Input::new(&f.term_font).small())))
                     .child(div().flex().items_center().gap(px(8.)).child(label(i18n::t!("app.settings.terminal"))).child(term))
+                    .child(hint(i18n::t!("app.settings.term_hint")))
                     .child(hint(i18n::t!("app.settings.background_hint")));
                 (i18n::t!("app.menu.settings"), b.into_any_element(), i18n::t!("app.dialog.save"), false, true, |this, _, cx| this.save_settings(cx))
             }

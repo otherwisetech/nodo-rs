@@ -22,6 +22,7 @@ pub mod model;
 pub mod monitor;
 pub mod paths;
 pub mod probe;
+pub mod remote;
 pub mod render;
 pub mod shell_env;
 pub mod time;

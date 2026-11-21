@@ -204,7 +204,7 @@ pub struct NodoApp {
     pub search: Entity<InputState>,
     pub disc: crate::discovery::DiscState,
     pub mon: crate::discovery::MonState,
-    pub output: Option<crate::panel::Output>,
+    pub term: crate::terminal::panel::TermPanel,
     pub dialog: Option<crate::dialogs::Dialog>,
     pub edit: Option<crate::panel::EditForm>,
     pub about: bool,
@@ -223,7 +223,10 @@ impl NodoApp {
         sync_theme(Some(window), cx);
         let search = cx.new(|cx| InputState::new(window, cx));
         let subs = vec![
-            window.observe_window_appearance(|window, cx| sync_theme(Some(window), cx)),
+            window.observe_window_appearance(|window, cx| {
+                sync_theme(Some(window), cx);
+                crate::terminal::panel::sync_style(cx);
+            }),
             cx.subscribe_in(&search, window, |this, _, ev: &InputEvent, _, cx| match ev {
                 InputEvent::Change => cx.notify(),
                 InputEvent::PressEnter { .. } => this.select_first_match(cx),
@@ -242,7 +245,7 @@ impl NodoApp {
             search,
             disc: Default::default(),
             mon: Default::default(),
-            output: None,
+            term: crate::terminal::panel::TermPanel::load(),
             dialog: None,
             edit: None,
             about: false,
@@ -347,7 +350,7 @@ impl NodoApp {
         self.selected = None;
         self.dialog = None;
         self.edit = None;
-        self.output = None;
+        self.forget_term_devices();
         self.cache = None;
         self.disc = Default::default();
         self.recent = nodo_core::paths::recent();
@@ -405,6 +408,10 @@ impl NodoApp {
     pub fn copy(&mut self, text: String, cx: &mut Context<Self>) {
         cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
         self.toast(i18n::t!("app.toast.copied", text = text), cx);
+    }
+
+    pub fn focus_app(&self, window: &mut Window, cx: &mut App) {
+        self.focus.focus(window, cx);
     }
 
     pub fn query(&self, cx: &App) -> String {
@@ -734,6 +741,7 @@ impl NodoApp {
             .text_size(px(11.))
             .text_color(t.ink_muted)
             .child(div().flex_1().min_w_0().truncate().child(left))
+            .children(self.render_term_footer(t, cx))
             .children(self.monitor_status(t))
             .child(crate::star::footer_link(t, cx))
             .child(
@@ -824,12 +832,12 @@ impl Render for NodoApp {
             Phase::Ready => {
                 let center = self.render_map(&t, cx);
                 let right = self.render_panel(&t, cx);
-                div().flex().size_full().min_h_0().child(div().flex().flex_col().flex_1().min_w_0().h_full().child(div().flex_1().min_h_0().child(center)).children(self.render_output(&t, cx))).child(right).into_any_element()
+                div().flex().size_full().min_h_0().child(div().flex().flex_col().flex_1().min_w_0().h_full().child(div().flex_1().min_h_0().child(center))).child(right).into_any_element()
             }
         };
-        div()
-            .key_context(CONTEXT)
-            .track_focus(&self.focus)
+        let body = self.render_with_terminal(body, &t, cx);
+        let root = div().key_context(CONTEXT).track_focus(&self.focus);
+        self.on_terminal_actions(root, cx)
             .on_action(cx.listener(|this, _: &NewMap, window, cx| this.new_map_dialog(window, cx)))
             .on_action(cx.listener(|this, _: &OpenMap, window, cx| this.open_dialog(window, cx)))
             .on_action(cx.listener(|this, _: &CloseMap, window, cx| this.close_map(window, cx)))

@@ -1,6 +1,6 @@
-//! Opening the user's own terminal, optionally running a command there (`ssh host`). Same
-//! launcher as rama. No embedded terminal: we build the exact command line for each terminal app,
-//! show it once, then spawn it with the login-shell environment.
+//! Opening the user's own terminal app, optionally running a command there (`ssh host`), when
+//! they prefer it to the embedded terminal. Same launcher as rama: we build the exact command line
+//! for each terminal app, show it once, then spawn it with the login-shell environment.
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 

@@ -24,6 +24,7 @@ gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component.workspace = true
 gpui-component-assets.workspace = true
+alacritty_terminal.workspace = true
 
 # build.rs embeds the .exe icon; only pulled in when building on Windows
 [target.'cfg(windows)'.build-dependencies]
@@ -31,4 +32,7 @@ winresource = "0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.7"
+
+[target.'cfg(unix)'.dependencies]
+# signalling a terminal tab's process group when it closes
 libc = "0.2"

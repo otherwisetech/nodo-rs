@@ -66,10 +66,17 @@ for scripts and AI agents.
   system notification for a **new unknown device on the LAN** (the first discovery of a map is the
   baseline, not a flood) and for a **saved device down for N minutes** (5 by default). Pause it
   any time.
-- **Quick actions**: SSH (opens *your* terminal — Terminal, iTerm2, Ghostty, Warp, WezTerm, kitty,
-  Alacritty, GNOME Terminal, Konsole, Windows Terminal… — and shows the exact command the first
-  time), open the web UI, VNC (`vnc://`), copy IP or MAC, Wake-on-LAN, and ping / traceroute with
-  live output under the map.
+- **Built-in terminal**: a tabbed panel (alacritty's terminal emulator) docked at the bottom or on
+  the right, resizable, collapsible to a bar or maximized (⌘T new shell, ⌘W close tab, ⌘J
+  show / hide, ⌘⇧↩ maximize). Tabs run your login shell with its environment. **SSH** opens a tab
+  running `ssh user@host` (the device's *SSH user*; the host is its MagicDNS name or Tailscale
+  address when it is on your tailnet, else its LAN address), **ping / traceroute** run in a tab,
+  and *Open terminal here* starts a shell with `NODO_DEVICE_IP`, `NODO_DEVICE_HOST`,
+  `NODO_DEVICE_NAME`, `NODO_DEVICE_USER` and `NODO_DEVICE_MAC` set. A device with a session open
+  shows a terminal badge on the graph. Prefer *your* terminal app (Terminal, iTerm2, Ghostty, Warp,
+  WezTerm, kitty, Alacritty, GNOME Terminal, Konsole, Windows Terminal…)? Pick it in Settings, or
+  use *More → SSH in the external terminal app*; Nodo shows the exact command the first time.
+- **Quick actions**: open the web UI, VNC (`vnc://`), copy IP or MAC, Wake-on-LAN.
 - **Export**: the graph as PNG, PDF (vector) or SVG, a Mermaid diagram, the inventory as CSV or
   JSON. **Import** a CSV inventory (any of name / IP / MAC / type / owner / location / tags /
   notes / links; other columns become custom fields).

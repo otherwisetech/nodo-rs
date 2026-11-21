@@ -496,6 +496,7 @@ impl NodoApp {
         let ring = if online { color } else { t.border_strong };
         let id = d.id;
         let is_me = d.fact("this_computer").is_some();
+        let session = self.has_session(id, cx);
         let circle = div()
             .relative()
             .size(z(CIRCLE))
@@ -509,7 +510,8 @@ impl NodoApp {
             .shadow_md()
             .child(ui::kind_svg(d.kind.id(), 22. * zoom, if online { t.ink } else { t.ink_muted }))
             .child(div().absolute().top(z(-1.)).right(z(-1.)).size(z(12.)).rounded_full().border(z(2.)).border_color(t.surface).bg(crate::map_view::status_color(t, st)))
-            .when(d.saved, |c| c.child(div().absolute().bottom(z(-2.)).right(z(-4.)).child(icon(IconName::Star, 11. * zoom, t.tag))));
+            .when(d.saved, |c| c.child(div().absolute().bottom(z(-2.)).right(z(-4.)).child(icon(IconName::Star, 11. * zoom, t.tag))))
+            .when(session, |c| c.child(div().absolute().bottom(z(-3.)).left(z(-4.)).size(z(16.)).rounded(z(4.)).flex().items_center().justify_center().bg(t.ink).border(z(1.5)).border_color(t.surface).child(icon(IconName::SquareTerminal, 10. * zoom, t.on_fill()))));
         let menu = self.device_menu(d, cx);
         div()
             .id(("dev", i))
@@ -666,7 +668,7 @@ impl DeviceMenu {
 
     pub fn build(&self, menu: PopupMenu, _window: &mut Window, _cx: &mut Context<PopupMenu>) -> PopupMenu {
         let ip = self.has_ip;
-        menu.item(self.item(i18n::t!("app.action.ssh"), ip, |this, id, _, cx| this.ssh(id, cx)))
+        menu.item(self.item(i18n::t!("app.action.ssh"), ip, |this, id, window, cx| this.ssh(id, window, cx)))
             .item(self.item(i18n::t!("app.action.web"), ip, |this, id, _, cx| this.open_web(id, cx)))
             .item(self.item(i18n::t!("app.action.vnc"), ip, |this, id, _, cx| this.open_vnc(id, cx)))
             .separator()
@@ -674,8 +676,9 @@ impl DeviceMenu {
             .item(self.item(i18n::t!("app.action.copy_mac"), self.has_mac, |this, id, _, cx| this.copy_mac(id, cx)))
             .item(self.item(i18n::t!("app.action.wake"), self.has_mac, |this, id, _, cx| this.wake(id, cx)))
             .separator()
-            .item(self.item(i18n::t!("app.action.ping"), ip, |this, id, _, cx| this.run_tool(id, nodo_core::tools::Tool::Ping, cx)))
-            .item(self.item(i18n::t!("app.action.traceroute"), ip, |this, id, _, cx| this.run_tool(id, nodo_core::tools::Tool::Traceroute, cx)))
+            .item(self.item(i18n::t!("app.action.ping"), ip, |this, id, window, cx| this.run_tool(id, nodo_core::tools::Tool::Ping, window, cx)))
+            .item(self.item(i18n::t!("app.action.traceroute"), ip, |this, id, window, cx| this.run_tool(id, nodo_core::tools::Tool::Traceroute, window, cx)))
+            .item(self.item(i18n::t!("app.action.shell_here"), true, |this, id, window, cx| this.shell_here(id, window, cx)))
             .separator()
             .item(self.item(if self.saved { i18n::t!("app.action.unsave") } else { i18n::t!("app.action.save") }, true, |this, id, _, cx| this.toggle_saved(id, cx)))
             .item(self.item(i18n::t!("app.action.edit"), true, |this, id, window, cx| this.start_edit(id, window, cx)))

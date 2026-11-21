@@ -11,6 +11,7 @@ mod map_view;
 mod panel;
 mod settings;
 mod star;
+mod terminal;
 mod theme;
 mod ui;
 mod util;
@@ -202,6 +203,8 @@ fn main() {
         set_dock_icon();
         gpui_component::init(cx);
         app::sync_theme(None, cx);
+        terminal::panel::sync_style(cx);
+        terminal::panel::bind_keys(cx);
         app::bind_keys(cx);
         cx.bind_keys([KeyBinding::new("secondary-q", Quit, None)]);
         cx.on_action(|_: &Quit, cx| cx.quit());
