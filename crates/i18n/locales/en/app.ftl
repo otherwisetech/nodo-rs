@@ -535,3 +535,7 @@ app.recent.move = Move…
 app.recent.remove = Remove from list
 app.recent.missing = Not found: {path}
 app.recent.missing_tip = {path} was moved or deleted. Click to locate it.
+# Vcity
+app.menu.help = Help
+app.vcity.menu = Create your store on Vcity
+app.vcity.invite = Sell products or services? Create your business's online store on Vcity — catalog, orders, payments, bookings, customer chat and more.

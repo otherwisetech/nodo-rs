@@ -535,3 +535,7 @@ app.recent.move = Déplacer…
 app.recent.remove = Retirer de la liste
 app.recent.missing = Introuvable : {path}
 app.recent.missing_tip = {path} a été déplacé ou supprimé. Cliquez pour le localiser.
+# Vcity
+app.menu.help = Aide
+app.vcity.menu = Créez votre boutique sur Vcity
+app.vcity.invite = Vous vendez des produits ou des services ? Créez la boutique en ligne de votre entreprise sur Vcity : catalogue, commandes, paiements, réservations, chat avec les clients et bien plus.
