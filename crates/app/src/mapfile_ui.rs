@@ -26,6 +26,13 @@ pub struct FileState {
     beat_gen: u64,
 }
 
+impl FileState {
+    /// Map closed: lock released, notices gone, any heartbeat loop stops.
+    pub fn reset(&mut self) {
+        *self = FileState { beat_gen: self.beat_gen + 1, ..Default::default() };
+    }
+}
+
 /// What happens to the original after the copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Relocate {
@@ -73,6 +80,7 @@ impl NodoApp {
     pub fn file_opened(&mut self, cx: &mut Context<Self>) {
         self.file.lock = None;
         self.file.elsewhere = None;
+        self.file.beat_gen += 1;
         let Some(path) = self.doc.as_ref().map(|d| d.store.path().to_path_buf()) else { return };
         self.file.cloud = mapfile::cloud_of(&path);
         if self.file.cloud.is_none() {
@@ -85,7 +93,6 @@ impl NodoApp {
             _ => self.file.lock = MapLock::take(&path, &host(), now).ok(),
         }
         self.file.conflicts = mapfile::conflict_copies(&path);
-        self.file.beat_gen += 1;
         let generation = self.file.beat_gen;
         cx.spawn(async move |this, cx| {
             loop {

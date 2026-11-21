@@ -379,7 +379,7 @@ impl NodoApp {
         self.forget_term_devices();
         self.cache = None;
         self.disc = Default::default();
-        self.file = Default::default();
+        self.file.reset();
         self.recent = nodo_core::paths::recent_entries();
         window.set_window_title(crate::APP_NAME);
         cx.notify();
