@@ -201,10 +201,11 @@ impl NodoApp {
             let net = nodo_core::discover::netinfo::detect();
             let me = nodo_core::this_computer::detect();
             let d = nodo_core::discover::passive_with(Default::default(), net.as_ref(), &me);
-            (net, me, d)
+            let runtimes = nodo_core::vms::detect();
+            (net, me, d, runtimes)
         });
         cx.spawn(async move |this, cx| {
-            let (net, mut me, d) = task.await;
+            let (net, mut me, d, runtimes) = task.await;
             this.update(cx, |this, cx| {
                 this.disc.passive = false;
                 this.disc.local = net;
@@ -221,6 +222,7 @@ impl NodoApp {
                 this.reidentify();
                 this.disc.last_refresh = Some(nodo_core::time::now());
                 this.apply(d, &[Source::Arp, Source::Mdns, Source::Ssdp], cx);
+                this.tidy_this_computer(&runtimes, cx);
                 // after the LAN devices are in, so tailnet nodes can join them
                 this.auto_tailscale(cx);
             })
@@ -228,6 +230,18 @@ impl NodoApp {
         })
         .detach();
         cx.notify();
+    }
+
+    /// Fold this computer's own bridge addresses into it and name the VMs on its bridges.
+    fn tidy_this_computer(&mut self, runtimes: &[nodo_core::vms::Runtime], cx: &mut Context<Self>) {
+        let (Some(me), Some(doc)) = (self.disc.me.clone(), self.doc.as_mut()) else { return };
+        let now = nodo_core::time::now();
+        let merged = doc.absorb_into_this_computer(&me, now).unwrap_or(0);
+        let named = doc.label_vms(&me, runtimes).unwrap_or(0);
+        if merged + named > 0 {
+            self.retarget();
+            self.touch(cx);
+        }
     }
 
     /// Tailscale only reads the local daemon's status, so it rides along with every refresh

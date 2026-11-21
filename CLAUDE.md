@@ -16,7 +16,8 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               import), render.rs (scene → SVG / PDF), mac.rs (+ data/oui.tsv.gz), tools.rs
               (ping / traceroute commands), remote.rs (SSH host / user / argv, device env), wol.rs,
               paths.rs (config dir, recent maps), shell_env.rs, this_computer.rs (which device
-              is the computer running Nodo: interfaces, host name, Tailscale node; runtime only)
+              is the computer running Nodo: interfaces, host name, Tailscale node; runtime only; its VM
+              bridges), vms.rs (VM / container runtimes running here, guest names)
 crates/i18n   nodo-i18n: embedded translation catalogs, t!/tn!/tv! macros, i18n guard tests
 crates/cli    `nodo`: list / show / scan / export / maps, on the same core
 crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar, footer, About;

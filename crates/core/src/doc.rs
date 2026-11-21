@@ -209,6 +209,38 @@ impl Doc {
         Ok(n)
     }
 
+    /// Fold devices that are really this computer (its own address on a VM bridge seen by
+    /// ARP or mDNS) into it. Returns how many were merged.
+    pub fn absorb_into_this_computer(&mut self, me: &crate::this_computer::LocalIdentity, now: i64) -> Result<usize> {
+        let Some(keep) = self.this_computer else { return Ok(0) };
+        let mut n = 0;
+        for other in crate::this_computer::absorb_targets(&self.data.devices, keep, me) {
+            if self.merge(keep, other, now)? {
+                n += 1;
+            }
+        }
+        Ok(n)
+    }
+
+    /// Name the guests on this computer's VM bridges after the runtime running them.
+    pub fn label_vms(&mut self, me: &crate::this_computer::LocalIdentity, runtimes: &[crate::vms::Runtime]) -> Result<usize> {
+        let bridges: Vec<crate::cidr::Cidr> = me.bridges().into_iter().map(|(_, c)| c).collect();
+        let hosts: Vec<IpAddr> = me.bridges().into_iter().map(|(ip, _)| IpAddr::V4(ip)).collect();
+        let names = crate::vms::label_guests(&self.data.devices, &bridges, &hosts, runtimes);
+        for (id, name) in &names {
+            if let Some(d) = self.data.device_mut(*id) {
+                d.name = name.clone();
+                // above the neighbour table's own guess, below mDNS / Tailscale names
+                d.set_fact("name_rank", "3");
+                if !d.kind_manual {
+                    d.kind = DeviceKind::Vm;
+                }
+            }
+        }
+        self.save_ids(&names.iter().map(|(id, _)| *id).collect::<Vec<_>>())?;
+        Ok(names.len())
+    }
+
     pub fn rename_network(&mut self, id: NetworkId, name: &str) -> Result<()> {
         if let Some(n) = self.data.networks.iter_mut().find(|n| n.id == id) {
             n.name = name.to_string();
@@ -264,6 +296,53 @@ mod tests {
         assert!(ev.iter().any(|e| e.kind == EventKind::Discovered), "pi's history moved over");
         assert_eq!(doc.data.device(id).unwrap().kind, DeviceKind::Printer);
         assert_eq!(doc.title(), "lab");
+    }
+
+    #[test]
+    fn bridge_address_and_vm_guest() {
+        use crate::this_computer::{IfaceKind, LocalIdentity, LocalIface};
+        let dir = tempfile::tempdir().unwrap();
+        let mut doc = Doc::create(&dir.path().join("vm.nodo")).unwrap();
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        let me = LocalIdentity {
+            hostname: Some("macbook-juan".into()),
+            ifaces: vec![
+                LocalIface { name: "en10".into(), kind: IfaceKind::Ethernet, mac: Some("00:e0:4c:53:63:88".into()), ips: vec![ip("192.168.40.7")], prefix: Some(24) },
+                LocalIface { name: "bridge100".into(), kind: IfaceKind::Bridge, mac: Some("be:d0:74:00:00:64".into()), ips: vec![ip("192.168.64.1")], prefix: Some(24) },
+            ],
+            tailscale_node: None,
+        };
+        // an earlier ARP read saw the bridge address as its own device, and the VM
+        let arp = |_: &str, m: &str| Observation::new(Layer::Lan, Source::Arp).ident(IdentKind::Mac, m);
+        let mut stray = arp("", "be:d0:74:00:00:64");
+        stray.ips.push(ip("192.168.64.1"));
+        let mut vm = arp("", "aa:00:00:00:00:03");
+        vm.ips.push(ip("192.168.64.3"));
+        doc.apply(&Discovery { devices: vec![stray, vm], ..Default::default() }, 1).unwrap();
+        assert_eq!(doc.data.devices.len(), 2);
+        let net = crate::discover::netinfo::LocalNet { iface: "en10".into(), ip: "192.168.40.7".parse().unwrap(), prefix: 24, gateway: Some("192.168.40.1".parse().unwrap()), mac: None };
+        let mut d = crate::discover::local(&net);
+        d.networks.extend(crate::this_computer::bridge_networks(&me));
+        d.devices = vec![crate::this_computer::observation(Some(&net), &me)];
+        doc.apply(&d, 2).unwrap();
+        let id = doc.this_computer.unwrap();
+        assert_eq!(doc.absorb_into_this_computer(&me, 3).unwrap(), 1, "the stray bridge device folds into this computer");
+        assert_eq!(doc.data.devices.len(), 2, "this computer and the VM");
+        assert!(doc.data.device(id).unwrap().addrs.iter().any(|a| a.ip == ip("192.168.64.1")));
+        let kiri = crate::vms::parse_ps("/Applications/Kiri.app/Contents/MacOS/kiri\n");
+        assert_eq!(doc.label_vms(&me, &kiri).unwrap(), 1);
+        let guest = doc.data.devices.iter().find(|d| d.id != id).unwrap();
+        assert_eq!(guest.kind, DeviceKind::Vm);
+        assert!(guest.name.contains("Kiri"));
+        // the VM subnet hangs from this computer on the graph
+        let g = crate::graph::build(&doc.data, &crate::graph::GraphOpts { this_computer: Some(id), ..Default::default() });
+        let net = doc.data.network_by_key("lan:192.168.64.0/24").unwrap().id;
+        let hub = g.index_of(crate::graph::NodeRef::Network(net)).unwrap();
+        assert_eq!(g.nodes[hub].parent, g.index_of(crate::graph::NodeRef::Device(id)), "under this computer, not the gateway");
+        let me_node = g.index_of(crate::graph::NodeRef::Device(id)).unwrap();
+        assert!(!g.overlay.iter().any(|(d, h, _)| *d == me_node && *h == hub));
+        let p = crate::layout::layout(&g, crate::layout::Mode::Radial);
+        assert_eq!(p.pos.len(), g.nodes.len());
     }
 
     #[test]

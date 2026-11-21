@@ -399,6 +399,22 @@ impl NodoApp {
         }
     }
 
+    /// A network's shown name: this computer's own VM bridge reads "Virtual machines on this Mac
+    /// (bridge100)" unless the user renamed it.
+    pub fn network_name(&self, n: &nodo_core::model::Network) -> String {
+        let auto = n.cidr.as_ref().is_some_and(|c| n.name == i18n::t!("core.net.vm_bridge", cidr = c.clone()));
+        if n.fact("bridge").is_some()
+            && auto
+            && let Some(me) = &self.disc.me
+            && let Some(c) = n.cidr.as_deref().and_then(nodo_core::cidr::Cidr::parse)
+            && let Some(i) = me.bridges().into_iter().find(|(ip, _)| c.contains(std::net::IpAddr::V4(*ip))).and_then(|(ip, _)| me.ifaces.iter().find(|i| i.ips.contains(&std::net::IpAddr::V4(ip))))
+        {
+            let iface = i.name.clone();
+            return if cfg!(target_os = "macos") { i18n::t!("app.net.vms_here_mac", iface = iface) } else { i18n::t!("app.net.vms_here", iface = iface) };
+        }
+        n.name.clone()
+    }
+
     /// "macbookpro · 192.168.40.7 · 100.81.184.80" for the footer.
     pub fn this_computer_summary(&self) -> Option<String> {
         let doc = self.doc.as_ref()?;

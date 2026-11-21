@@ -58,6 +58,7 @@ pub fn passive_with(opts: Passive, net: Option<&netinfo::LocalNet>, me: &crate::
     if let Some(n) = net {
         d.networks.push(lan_network(n));
     }
+    d.networks.extend(crate::this_computer::bridge_networks(me));
     d.devices.push(crate::this_computer::observation(net, me));
     let mdns = opts.mdns.then(|| std::thread::spawn(move || mdns::browse(opts.wait)));
     let ssdp = opts.ssdp.then(|| {

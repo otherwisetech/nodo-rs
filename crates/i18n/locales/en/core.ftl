@@ -30,3 +30,5 @@ core.layer.wireguard = WireGuard
 core.layer.internet = Internet
 core.net.internet = Internet / remote
 core.net.vm_bridge = Virtual machines {cidr}
+core.vm.guest = {runtime} VM
+core.vm.guest_engine = {runtime} VM ({engine})

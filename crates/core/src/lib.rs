@@ -29,4 +29,5 @@ pub mod shell_env;
 pub mod time;
 pub mod this_computer;
 pub mod tools;
+pub mod vms;
 pub mod wol;

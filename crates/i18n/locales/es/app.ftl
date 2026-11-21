@@ -362,3 +362,5 @@ app.iface.bridge = Puente
 app.iface.other = Otra
 app.list.me_first = Este equipo arriba
 app.term.local_shell = Shell local
+app.net.vms_here_mac = Máquinas virtuales en este Mac ({iface})
+app.net.vms_here = Máquinas virtuales en este equipo ({iface})

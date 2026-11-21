@@ -24,6 +24,8 @@ pub struct LocalIface {
     pub mac: Option<String>,
     /// Without loopback and link-local addresses.
     pub ips: Vec<IpAddr>,
+    /// Prefix length of the first IPv4 address.
+    pub prefix: Option<u8>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -58,7 +60,7 @@ fn kind_from_name(name: &str, ips: &[IpAddr]) -> IfaceKind {
         IfaceKind::Ethernet
     } else if n.starts_with("wg") || n.starts_with("tun") || n.starts_with("utun") || n.starts_with("ppp") || n.starts_with("ipsec") {
         IfaceKind::Vpn
-    } else if n.starts_with("bridge") || n.starts_with("br") || n.starts_with("docker") || n.starts_with("virbr") || n.starts_with("veth") || n.starts_with("vmenet") || n.starts_with("vnic") {
+    } else if n.starts_with("bridge") || n.starts_with("br") || n.starts_with("docker") || n.starts_with("virbr") || n.starts_with("veth") || n.starts_with("vmnet") || n.starts_with("vmenet") || n.starts_with("vnic") || n.starts_with("lxdbr") || n.starts_with("cni") || n.starts_with("podman") {
         IfaceKind::Bridge
     } else {
         IfaceKind::Other
@@ -98,9 +100,10 @@ fn kind_from_port(port: &str) -> IfaceKind {
 /// `ports` from [`parse_hardware_ports`] names Wi-Fi and Ethernet.
 pub fn parse_ifconfig_all(s: &str, ports: &[(String, String)]) -> Vec<LocalIface> {
     let mut out: Vec<LocalIface> = Vec::new();
-    let mut cur: Option<(String, Option<String>, Vec<IpAddr>)> = None;
-    let flush = |c: Option<(String, Option<String>, Vec<IpAddr>)>, out: &mut Vec<LocalIface>| {
-        let Some((name, mac, ips)) = c else { return };
+    type Cur = (String, Option<String>, Vec<IpAddr>, Option<u8>);
+    let mut cur: Option<Cur> = None;
+    let flush = |c: Option<Cur>, out: &mut Vec<LocalIface>| {
+        let Some((name, mac, ips, prefix)) = c else { return };
         if ips.is_empty() || name.starts_with("lo") {
             return;
         }
@@ -108,16 +111,16 @@ pub fn parse_ifconfig_all(s: &str, ports: &[(String, String)]) -> Vec<LocalIface
             Some((_, p)) if !ips.iter().any(is_tailscale_ip) => kind_from_port(p),
             _ => kind_from_name(&name, &ips),
         };
-        out.push(LocalIface { name, kind, mac, ips });
+        out.push(LocalIface { name, kind, mac, ips, prefix });
     };
     for l in s.lines() {
         if !l.starts_with([' ', '\t']) && !l.is_empty() {
             flush(cur.take(), &mut out);
             let name = l.split(':').next().unwrap_or_default().trim().to_string();
-            cur = Some((name, None, Vec::new()));
+            cur = Some((name, None, Vec::new(), None));
             continue;
         }
-        let Some((_, mac, ips)) = cur.as_mut() else { continue };
+        let Some((_, mac, ips, prefix)) = cur.as_mut() else { continue };
         let f: Vec<&str> = l.split_whitespace().collect();
         match f.first() {
             Some(&"ether") => *mac = f.get(1).and_then(|m| crate::mac::normalize(m)),
@@ -125,6 +128,9 @@ pub fn parse_ifconfig_all(s: &str, ports: &[(String, String)]) -> Vec<LocalIface
                 if let Some(ip) = f.get(1).and_then(|a| a.split('%').next()).and_then(|a| a.parse::<IpAddr>().ok()).filter(usable)
                     && !ips.contains(&ip)
                 {
+                    if ip.is_ipv4() && prefix.is_none() {
+                        *prefix = f.iter().position(|x| *x == "netmask").and_then(|i| f.get(i + 1)).and_then(|m| crate::cidr::prefix_from_mask(m));
+                    }
                     ips.push(ip);
                 }
             }
@@ -138,19 +144,28 @@ pub fn parse_ifconfig_all(s: &str, ports: &[(String, String)]) -> Vec<LocalIface
 /// Linux `ip -o addr show`: `2: wlp2s0    inet 10.0.0.42/22 brd …` one address per line.
 /// MACs come separately (`/sys/class/net/<if>/address`).
 pub fn parse_ip_addr_all(s: &str) -> Vec<LocalIface> {
-    let mut by: Vec<(String, Vec<IpAddr>)> = Vec::new();
+    let mut by: Vec<LocalIface> = Vec::new();
     for l in s.lines() {
         let f: Vec<&str> = l.split_whitespace().collect();
         let (Some(name), Some(i)) = (f.get(1), f.iter().position(|x| *x == "inet" || *x == "inet6")) else { continue };
         let name = name.trim_end_matches(':').split('@').next().unwrap_or_default().to_string();
-        let Some(ip) = f.get(i + 1).and_then(|a| a.split('/').next()).and_then(|a| a.parse::<IpAddr>().ok()).filter(usable) else { continue };
-        match by.iter_mut().find(|(n, _)| *n == name) {
-            Some((_, v)) if !v.contains(&ip) => v.push(ip),
+        let Some((a, p)) = f.get(i + 1).map(|a| a.split_once('/').unwrap_or((a, ""))) else { continue };
+        let Some(ip) = a.parse::<IpAddr>().ok().filter(usable) else { continue };
+        let prefix = p.parse::<u8>().ok().filter(|_| ip.is_ipv4());
+        match by.iter_mut().find(|x| x.name == name) {
+            Some(x) if !x.ips.contains(&ip) => {
+                x.ips.push(ip);
+                x.prefix = x.prefix.or(prefix);
+            }
             Some(_) => {}
-            None => by.push((name, vec![ip])),
+            None => by.push(LocalIface { name, kind: IfaceKind::Other, mac: None, ips: vec![ip], prefix }),
         }
     }
-    by.into_iter().filter(|(n, _)| n != "lo").map(|(name, ips)| LocalIface { kind: kind_from_name(&name, &ips), name, mac: None, ips }).collect()
+    by.retain(|x| x.name != "lo");
+    for x in &mut by {
+        x.kind = kind_from_name(&x.name, &x.ips);
+    }
+    by
 }
 
 impl LocalIdentity {
@@ -182,7 +197,7 @@ impl LocalIdentity {
         }
         match self.ifaces.iter_mut().find(|i| i.kind == IfaceKind::Tailscale) {
             Some(i) => i.ips.extend(missing),
-            None => self.ifaces.push(LocalIface { name: "tailscale".into(), kind: IfaceKind::Tailscale, mac: None, ips: missing }), // i18n-ok: interface id
+            None => self.ifaces.push(LocalIface { name: "tailscale".into(), kind: IfaceKind::Tailscale, mac: None, ips: missing, prefix: None }), // i18n-ok: interface id
         }
     }
 
@@ -194,6 +209,33 @@ impl LocalIdentity {
         }
         v.dedup();
         v
+    }
+
+    /// This computer's address and subnet on each VM / container bridge (`bridge100`,
+    /// `docker0`, `virbr0`, `vEthernet`…).
+    pub fn bridges(&self) -> Vec<(std::net::Ipv4Addr, crate::cidr::Cidr)> {
+        self.ifaces
+            .iter()
+            .filter(|i| i.kind == IfaceKind::Bridge)
+            .filter_map(|i| {
+                let ip = i.ips.iter().find_map(|ip| match ip {
+                    IpAddr::V4(v4) if v4.is_private() => Some(*v4),
+                    _ => None,
+                })?;
+                Some((ip, crate::cidr::Cidr::v4(ip, i.prefix.unwrap_or(24))))
+            })
+            .collect()
+    }
+
+    /// The bridge interface whose subnet holds `ip`.
+    pub fn bridge_for(&self, ip: IpAddr) -> Option<&LocalIface> {
+        let (host, _) = self.bridges().into_iter().find(|(_, c)| c.contains(ip))?;
+        self.ifaces.iter().find(|i| i.ips.contains(&IpAddr::V4(host)))
+    }
+
+    /// Every MAC of every interface (bridges too): a device that only has these is this computer.
+    fn all_macs(&self) -> Vec<String> {
+        self.ifaces.iter().filter_map(|i| i.mac.clone()).collect()
     }
 
     /// Wi-Fi, Ethernet and Tailscale first, bridges and the rest after.
@@ -216,7 +258,7 @@ pub fn detect() -> LocalIdentity {
         }
     } else if cfg!(windows) {
         if let Some(n) = crate::discover::netinfo::detect() {
-            ifaces.push(LocalIface { name: n.iface.clone(), kind: IfaceKind::Ethernet, mac: n.mac.clone(), ips: vec![IpAddr::V4(n.ip)] });
+            ifaces.push(LocalIface { name: n.iface.clone(), kind: IfaceKind::Ethernet, mac: n.mac.clone(), ips: vec![IpAddr::V4(n.ip)], prefix: Some(n.prefix) });
         }
     } else if let Ok(o) = crate::cmd::run_named("ip", &["-o", "addr", "show"], t) {
         ifaces = parse_ip_addr_all(&o.stdout);
@@ -238,6 +280,13 @@ pub fn observation(net: Option<&LocalNet>, me: &LocalIdentity) -> Observation {
             if let Some(ip) = me.ifaces.iter().filter(|i| matches!(i.kind, IfaceKind::Wifi | IfaceKind::Ethernet)).flat_map(|i| i.ips.iter()).find(|ip| ip.is_ipv4()) {
                 o.ips.push(*ip);
             }
+        }
+    }
+    // its own address on each VM / container bridge (192.168.64.1 on bridge100): it is this
+    // computer, not another device on that network
+    for (ip, _) in me.bridges() {
+        if !o.ips.contains(&IpAddr::V4(ip)) {
+            o.ips.push(IpAddr::V4(ip));
         }
     }
     let mut macs: Vec<String> = net.and_then(|n| n.mac.clone()).into_iter().collect();
@@ -305,6 +354,37 @@ pub fn identify(devices: &[Device], me: &LocalIdentity, hint: Option<DeviceId>) 
         [one] => Some(*one),
         many => hint.filter(|h| many.contains(h)),
     }
+}
+
+/// The local VM / container bridges as networks, so their subnets get their own group.
+pub fn bridge_networks(me: &LocalIdentity) -> Vec<crate::model::NetworkObservation> {
+    me.bridges()
+        .into_iter()
+        .filter_map(|(ip, c)| {
+            let iface = me.ifaces.iter().find(|i| i.ips.contains(&IpAddr::V4(ip)))?.name.clone();
+            let cidr = c.to_string();
+            Some(crate::model::NetworkObservation { key: format!("lan:{cidr}"), name: i18n::t!("core.net.vm_bridge", cidr = cidr.clone()), layer: Some(Layer::Lan), cidr: Some(cidr), facts: vec![("bridge".into(), "vm".into()), ("interface".into(), iface)], ..Default::default() })
+        })
+        .collect()
+}
+
+/// Other devices that are really this computer: everything they hold (addresses, MACs) is one
+/// of this computer's interfaces, typically its own address on a VM bridge seen by ARP / mDNS.
+/// They get merged into it.
+pub fn absorb_targets(devices: &[Device], me_id: DeviceId, me: &LocalIdentity) -> Vec<DeviceId> {
+    let macs = me.all_macs();
+    let ips: Vec<IpAddr> = me.ips().collect();
+    devices
+        .iter()
+        .filter(|d| d.id != me_id && !d.name_manual && !d.saved)
+        .filter(|d| !d.idents.iter().any(|i| matches!(i.kind, IdentKind::TailscaleNode | IdentKind::AwsInstance | IdentKind::WgPeer)))
+        .filter(|d| {
+            let dm: Vec<&str> = d.macs().collect();
+            let any = !dm.is_empty() || !d.addrs.is_empty();
+            any && dm.iter().all(|m| macs.iter().any(|x| x == m)) && d.addrs.iter().all(|a| ips.contains(&a.ip) || ((a.ip.is_ipv6()) && !dm.is_empty()))
+        })
+        .map(|d| d.id)
+        .collect()
 }
 
 /// Map setting holding the hint, per host name (a synced map keeps one per computer).
@@ -414,8 +494,8 @@ Ethernet Address: 36:b6:fb:c0:8d:00
         let me = LocalIdentity {
             hostname: Some("studio".into()),
             ifaces: vec![
-                LocalIface { name: "en0".into(), kind: IfaceKind::Ethernet, mac: Some("aa:bb:cc:00:00:20".into()), ips: vec!["192.168.40.7".parse().unwrap()] },
-                LocalIface { name: "utun3".into(), kind: IfaceKind::Tailscale, mac: None, ips: vec!["100.90.1.2".parse().unwrap()] },
+                LocalIface { name: "en0".into(), kind: IfaceKind::Ethernet, mac: Some("aa:bb:cc:00:00:20".into()), ips: vec!["192.168.40.7".parse().unwrap()], prefix: Some(24) },
+                LocalIface { name: "utun3".into(), kind: IfaceKind::Tailscale, mac: None, ips: vec!["100.90.1.2".parse().unwrap()], prefix: None },
             ],
             tailscale_node: Some("nStudio".into()),
         };
@@ -438,10 +518,37 @@ Ethernet Address: 36:b6:fb:c0:8d:00
     }
 
     #[test]
+    fn bridges_belong_to_this_computer() {
+        let me = mac_me();
+        assert_eq!(me.bridges().iter().map(|(ip, c)| (ip.to_string(), c.to_string())).collect::<Vec<_>>(), vec![("192.168.64.1".to_string(), "192.168.64.0/24".to_string())]);
+        assert_eq!(me.bridge_for("192.168.64.3".parse().unwrap()).map(|i| i.name.as_str()), Some("bridge100"));
+        assert!(me.bridge_for("192.168.40.3".parse().unwrap()).is_none());
+        let nets = bridge_networks(&me);
+        assert_eq!(nets.len(), 1);
+        assert_eq!(nets[0].key, "lan:192.168.64.0/24");
+        assert!(nets[0].facts.contains(&("interface".into(), "bridge100".into())));
+        // utun is never a bridge; Linux and Windows names
+        assert_eq!(kind_from_name("utun3", &[]), IfaceKind::Vpn);
+        for b in ["docker0", "br-1a2b3c", "virbr0", "vmnet8", "vEthernet (Default Switch)", "bridge101"] {
+            assert_eq!(kind_from_name(b, &[]), IfaceKind::Bridge, "{b}");
+        }
+        // the self observation carries the bridge address; a stray device holding only it merges
+        let o = observation(None, &me);
+        assert!(o.ips.contains(&"192.168.64.1".parse().unwrap()));
+        let devices = vec![
+            dev(1, &[("192.168.40.7", Layer::Lan)], &[(IdentKind::Mac, "00:e0:4c:53:63:88")]),
+            dev(5, &[("192.168.64.1", Layer::Lan)], &[(IdentKind::Mac, "be:d0:74:00:00:64")]),
+            dev(6, &[("192.168.64.3", Layer::Lan)], &[(IdentKind::Mac, "aa:00:00:00:00:03")]),
+            dev(7, &[], &[(IdentKind::Mac, "be:d0:74:00:00:64")]),
+        ];
+        assert_eq!(absorb_targets(&devices, 1, &me), vec![5, 7], "the VM itself stays");
+    }
+
+    #[test]
     fn observation_without_a_network() {
         let me = mac_me();
         let o = observation(None, &me);
-        assert_eq!(o.ips, vec!["192.168.40.9".parse::<IpAddr>().unwrap()], "first Wi-Fi / Ethernet IPv4");
+        assert_eq!(o.ips[0], "192.168.40.9".parse::<IpAddr>().unwrap(), "first Wi-Fi / Ethernet IPv4");
         assert_eq!(o.idents.iter().filter(|i| i.kind == IdentKind::Mac).count(), 2);
         assert_eq!(o.name.as_deref(), Some("macbook-juan"));
         let bare = observation(None, &LocalIdentity { hostname: Some("pc-1".into()), ..Default::default() });

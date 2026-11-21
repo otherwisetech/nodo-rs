@@ -346,7 +346,7 @@ impl NodoApp {
         let Some(n) = doc.data.network(id) else { return s };
         let kv = |k: String, v: String| div().flex().flex_col().gap(px(2.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(k)).child(div().text_size(px(12.5)).line_height(px(17.)).child(v));
         let devices = doc.data.devices.iter().filter(|d| d.addrs.iter().any(|a| a.network == Some(id))).count();
-        s = s.child(div().flex().items_center().gap(px(8.)).child(div().size(px(10.)).rounded_full().bg(t.layer(n.layer))).child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(n.name.clone()))).child(ui::chip(layer_label(n.layer), t.layer(n.layer), 11.));
+        s = s.child(div().flex().items_center().gap(px(8.)).child(div().size(px(10.)).rounded_full().bg(t.layer(n.layer))).child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(self.network_name(n)))).child(ui::chip(layer_label(n.layer), t.layer(n.layer), 11.));
         if let Some(c) = &n.cidr {
             s = s.child(kv(i18n::t!("app.net.cidr"), c.clone()));
         }
@@ -413,7 +413,7 @@ impl NodoApp {
         // addresses and identities
         let mut addrs = div().flex().flex_col().gap(px(3.));
         for a in &d.addrs {
-            let net = a.network.and_then(|n| self.doc.as_ref()?.data.network(n)).map(|n| n.name.clone()).unwrap_or_default();
+            let net = a.network.and_then(|n| self.doc.as_ref()?.data.network(n)).map(|n| self.network_name(n)).unwrap_or_default();
             addrs = addrs.child(div().flex().items_center().gap(px(6.)).child(div().size(px(7.)).rounded_full().bg(t.layer(a.layer))).child(mono(a.ip.to_string())).child(div().text_size(px(11.)).text_color(t.ink_muted).truncate().child(net)));
         }
         if !d.addrs.is_empty() {

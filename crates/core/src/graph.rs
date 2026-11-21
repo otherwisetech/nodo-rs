@@ -60,7 +60,9 @@ fn layer_rank(l: Layer) -> u8 {
 
 /// The LAN network whose gateway device we know, else the first LAN network.
 pub fn primary_lan(map: &MapData) -> Option<(NetworkId, Option<DeviceId>)> {
-    let lans: Vec<_> = map.networks.iter().filter(|n| n.layer == Layer::Lan).collect();
+    // a VM bridge is never the home LAN, whatever order the networks were found in
+    let mut lans: Vec<_> = map.networks.iter().filter(|n| n.layer == Layer::Lan).collect();
+    lans.sort_by_key(|n| n.fact("bridge").is_some());
     for n in &lans {
         if let Some(gw) = n.gateway
             && let Some(d) = map.devices.iter().find(|d| d.addrs.iter().any(|a| a.ip == gw && a.layer == Layer::Lan))
@@ -92,6 +94,7 @@ pub fn build(map: &MapData, opts: &GraphOpts) -> Graph {
             _ => 0,
         }
     };
+    let is_bridge = |id: Option<NetworkId>| id.and_then(|n| map.network(n)).is_some_and(|n| n.fact("bridge").is_some());
     let mut devices: Vec<_> = map.devices.iter().filter(|d| Some(d.id) != gw_dev).collect();
     devices.sort_by_key(|d| (d.name.to_lowercase(), d.id));
     for d in devices {
@@ -99,7 +102,8 @@ pub fn build(map: &MapData, opts: &GraphOpts) -> Graph {
         if addrs.is_empty() && !(d.addrs.is_empty() && d.saved) {
             continue;
         }
-        addrs.sort_by_key(|a| (layer_rank(a.layer), !a.ip.is_ipv4()));
+        // a host's own address on its VM bridge doesn't say where the host is
+        addrs.sort_by_key(|a| (layer_rank(a.layer), is_bridge(a.network), !a.ip.is_ipv4()));
         let first = addrs.first();
         let parent = hub_for(&g, first.and_then(|a| a.network));
         let me = g.nodes.len();
@@ -112,6 +116,12 @@ pub fn build(map: &MapData, opts: &GraphOpts) -> Graph {
                 continue;
             }
             let h = hub_for(&g, a.network);
+            // this computer's own VM / container bridge hangs from it, not from the gateway
+            if Some(d.id) == opts.this_computer && is_bridge(a.network) && h != 0 && g.nodes[h].parent == Some(0) {
+                g.nodes[h].parent = Some(me);
+                linked.push(h);
+                continue;
+            }
             if !linked.contains(&h) {
                 linked.push(h);
                 g.overlay.push((me, h, a.layer));

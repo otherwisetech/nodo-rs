@@ -66,6 +66,11 @@ for scripts and AI agents.
   "this computer on top" option in the list, its interfaces in the side panel, a local shell for
   *Open terminal here*, and a line in the footer. It is added to the map on the first refresh even
   when nothing else answers.
+- **Virtual machines on this computer**: its VM / container bridges (macOS `bridge1xx` /
+  `vmnet`, Linux `docker0`, `br-*`, `virbr*`, Windows `vEthernet`) are drawn as a group hanging
+  from this computer, not from the router; its own address there (192.168.64.1) is one of its
+  interfaces, and guests are named after the runtime running them when Nodo can tell (Docker
+  Desktop, OrbStack, Colima / Lima, UTM, Parallels, VMware, VirtualBox, Multipass, Kiri).
 - **Monitoring while the app is open**: saved devices (or any you choose) are checked every 30 s
   (configurable) with the system `ping`, falling back to a TCP connect to a port the device is
   known to answer on. Latency, uptime this session, last seen; a history per device (discovered,

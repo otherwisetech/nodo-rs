@@ -341,7 +341,7 @@ impl NodoApp {
         for (k, f) in c.placed.frames.iter().enumerate() {
             let color = f.layer.map(|l| t.layer(l)).unwrap_or(t.border_strong);
             let label = match (f.hub.map(|h| c.graph.nodes[h].node), f.layer) {
-                (Some(NodeRef::Network(n)), _) => doc.data.network(n).map(|n| n.name.clone()).unwrap_or_default(),
+                (Some(NodeRef::Network(n)), _) => doc.data.network(n).map(|n| self.network_name(n)).unwrap_or_default(),
                 (Some(_), _) => layer_label(Layer::Lan),
                 (None, Some(l)) => layer_label(l),
                 _ => String::new(),
@@ -490,7 +490,7 @@ impl NodoApp {
             .when(!lit, |d| d.opacity(0.35))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(div().size(z(HUB)).rounded(z(14.)).flex().items_center().justify_center().bg(color.opacity(0.14)).border(z(if selected { 3. } else { 2. })).border_color(if selected { t.accent } else { color }).shadow_md().child(ui::kind_svg(icon_name, 26. * zoom, color)))
-            .child(div().max_w(z(NODE_W)).truncate().px(z(4.)).rounded(z(4.)).bg(t.canvas.opacity(0.85)).text_size(z(12.)).font_weight(FontWeight::SEMIBOLD).child(net.name.clone()))
+            .child(div().max_w(z(NODE_W)).truncate().px(z(4.)).rounded(z(4.)).bg(t.canvas.opacity(0.85)).text_size(z(12.)).font_weight(FontWeight::SEMIBOLD).child(self.network_name(net)))
             .when_some(net.cidr.clone().filter(|c| *c != net.name), |d, c| d.child(div().text_size(z(10.5)).font_family(MONO).text_color(t.ink_muted).child(c)))
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                 cx.stop_propagation();
