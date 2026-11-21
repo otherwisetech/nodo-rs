@@ -417,7 +417,7 @@ impl NodoApp {
                 cx.spawn(async move |this, cx| {
                     let r = task.await;
                     this.update(cx, |this, cx| match r {
-                        Ok(()) => this.send_payload(id, Payload::File { path: zip, name: format!("{name}.zip"), kind: Kind::Folder }, cx),
+                        Ok(()) => this.send_payload(id, Payload::File { path: zip, name: format!("{name}.zip"), kind: Kind::Folder }, cx), // i18n-ok: file name
                         Err(e) => this.toast(i18n::t!("app.share.zip_failed", detail = e.to_string()), cx),
                     })
                     .ok();

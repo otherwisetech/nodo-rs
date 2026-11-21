@@ -78,6 +78,15 @@ for scripts and AI agents.
   system notification for a **new unknown device on the LAN** (the first discovery of a map is the
   baseline, not a flood) and for a **saved device down for N minutes** (5 by default). Pause it
   any time.
+- **Services, not only devices**: watch websites and APIs (HTTP / HTTPS: status code, latency,
+  a keyword the page must contain, TLS certificate expiry), TCP ports, DNS names and pings, each
+  at its own interval, attached to a device or on their own (presets for a website, an API health
+  endpoint, SSH, DNS, ping). The **Status** view lists them with latency, a recent-checks
+  sparkline, uptime over 24 h / 7 d / 30 d, certificate days left and the incidents (down / back up
+  with how long); alerts in the app and as notifications when one goes down, gets slow or its
+  certificate is about to expire; a coloured badge on the device in the graph. Like device
+  monitoring it runs only while the map is open; the map file keeps hourly counts (written at
+  most every 10 minutes) and the incidents.
 - **Built-in terminal**: a tabbed panel (alacritty's terminal emulator) docked at the bottom or on
   the right, resizable, collapsible to a bar or maximized (⌘T new shell, ⌘W close tab, ⌘J
   show / hide, ⌘⇧↩ maximize). Tabs run your login shell with its environment. **SSH** opens a tab
@@ -133,6 +142,9 @@ nodo scan --passive                   # neighbour table + mDNS + SSDP, printed (
 nodo scan --passive --tailscale --save    # …and merge the result into the map
 nodo scan --aws my-sso-profile --region us-east-1 --json
 nodo export mermaid --layout subnet   # or svg, pdf, csv, json; -o FILE
+nodo services add https https://example.com --name "Website" --keyword "Example Domain"
+nodo services list --json             # uptime 24 h / 7 d / 30 d and incidents
+nodo services check                   # run every check now; exit code 1 if one fails
 ```
 
 ## Download

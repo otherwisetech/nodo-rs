@@ -44,7 +44,30 @@ pub const MIGRATIONS: &[&str] = &[
     // 2: look devices up by address and identity value
     "CREATE INDEX addresses_ip ON addresses(ip);
      CREATE INDEX identities_value ON identities(kind, value);",
+    // 3: monitored services (HTTP / TCP / DNS / ICMP), hourly results, incidents
+    "CREATE TABLE services (
+       id INTEGER PRIMARY KEY, name TEXT NOT NULL, device INTEGER REFERENCES devices(id) ON DELETE SET NULL,
+       spec TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1);
+     CREATE TABLE service_hours (
+       service INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE, hour INTEGER NOT NULL,
+       checks INTEGER NOT NULL DEFAULT 0, ups INTEGER NOT NULL DEFAULT 0,
+       latency_sum REAL NOT NULL DEFAULT 0, latency_n INTEGER NOT NULL DEFAULT 0,
+       PRIMARY KEY (service, hour));
+     CREATE TABLE service_incidents (
+       id INTEGER PRIMARY KEY, service INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+       start INTEGER NOT NULL, end INTEGER, cause TEXT NOT NULL DEFAULT '');
+     CREATE INDEX service_incidents_service ON service_incidents(service, start);",
 ];
+
+/// One outage of a service: from `start` until `end` (None while still down).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Incident {
+    pub id: i64,
+    pub service: crate::services::ServiceId,
+    pub start: i64,
+    pub end: Option<i64>,
+    pub cause: String,
+}
 
 pub fn latest_version() -> i64 {
     MIGRATIONS.len() as i64
@@ -392,6 +415,73 @@ impl Store {
         Ok(out)
     }
 
+    pub fn services(&self) -> Result<Vec<crate::services::ServiceCheck>> {
+        let mut st = self.conn.prepare("SELECT id, name, device, spec, enabled FROM services ORDER BY name COLLATE NOCASE, id")?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<i64>>(2)?, r.get::<_, String>(3)?, r.get::<_, bool>(4)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, name, device, spec, enabled) = row?;
+            if let Ok(spec) = serde_json::from_str(&spec) {
+                out.push(crate::services::ServiceCheck { id, name, device, spec, enabled });
+            }
+        }
+        Ok(out)
+    }
+
+    /// Insert (`id` 0) or update; returns the id.
+    pub fn save_service(&mut self, s: &crate::services::ServiceCheck) -> Result<i64> {
+        let spec = serde_json::to_string(&s.spec).unwrap_or_default();
+        if s.id == 0 {
+            self.conn.execute("INSERT INTO services (name, device, spec, enabled) VALUES (?1, ?2, ?3, ?4)", params![s.name, s.device, spec, s.enabled])?;
+            return Ok(self.conn.last_insert_rowid());
+        }
+        self.conn.execute("INSERT INTO services (id, name, device, spec, enabled) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO UPDATE SET name = ?2, device = ?3, spec = ?4, enabled = ?5", params![s.id, s.name, s.device, spec, s.enabled])?;
+        Ok(s.id)
+    }
+
+    pub fn delete_service(&mut self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM services WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Add a batch of checks to the hour buckets (one small transaction).
+    pub fn add_service_hours(&mut self, rows: &[(i64, crate::services::Hour)]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        for (svc, h) in rows {
+            tx.execute(
+                "INSERT INTO service_hours (service, hour, checks, ups, latency_sum, latency_n) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(service, hour) DO UPDATE SET checks = checks + ?3, ups = ups + ?4, latency_sum = latency_sum + ?5, latency_n = latency_n + ?6",
+                params![svc, h.hour, h.checks, h.ups, h.latency_sum, h.latency_n],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn service_hours(&self, service: i64, since: i64) -> Result<Vec<crate::services::Hour>> {
+        let mut st = self.conn.prepare("SELECT hour, checks, ups, latency_sum, latency_n FROM service_hours WHERE service = ?1 AND hour >= ?2 ORDER BY hour")?;
+        let rows = st.query_map(params![service, since], |r| Ok(crate::services::Hour { hour: r.get(0)?, checks: r.get(1)?, ups: r.get(2)?, latency_sum: r.get(3)?, latency_n: r.get(4)? }))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn open_incident(&mut self, service: i64, start: i64, cause: &str) -> Result<i64> {
+        self.conn.execute("INSERT INTO service_incidents (service, start, cause) VALUES (?1, ?2, ?3)", params![service, start, cause])?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Close the service's open incident, if any.
+    pub fn close_incident(&mut self, service: i64, end: i64) -> Result<()> {
+        self.conn.execute("UPDATE service_incidents SET end = ?2 WHERE service = ?1 AND end IS NULL", params![service, end])?;
+        Ok(())
+    }
+
+    /// Newest first; all services with `None`.
+    pub fn incidents(&self, service: Option<i64>, limit: usize) -> Result<Vec<Incident>> {
+        let mut st = self.conn.prepare("SELECT id, service, start, end, cause FROM service_incidents WHERE (?1 IS NULL OR service = ?1) ORDER BY start DESC, id DESC LIMIT ?2")?;
+        let rows = st.query_map(params![service, limit as i64], |r| Ok(Incident { id: r.get(0)?, service: r.get(1)?, start: r.get(2)?, end: r.get(3)?, cause: r.get(4)? }))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     /// Up/down transitions of a device since `since`, oldest first (for uptime).
     pub fn transitions(&self, device: DeviceId, since: i64) -> Result<Vec<(i64, bool)>> {
         let mut st = self.conn.prepare("SELECT at, kind FROM events WHERE device = ?1 AND at >= ?2 AND kind IN ('up', 'down') ORDER BY at, id")?;
@@ -496,6 +586,25 @@ mod tests {
         let p4 = dir.path().join("notes.txt");
         std::fs::write(&p4, "hello, this is not sqlite at all, just some text that is long enough").unwrap();
         assert!(Store::open(&p4).is_err());
+        // version 3: services, hourly buckets (added up), incidents
+        let mut s = Store::open(&p).unwrap();
+        let mut svc = crate::services::ServiceCheck { id: 0, name: "Site".into(), device: Some(7), spec: crate::services::Spec::new(crate::services::CheckKind::Http, "https://example.com"), enabled: true };
+        svc.id = s.save_service(&svc).unwrap();
+        svc.name = "Website".into();
+        assert_eq!(s.save_service(&svc).unwrap(), svc.id);
+        assert_eq!(s.services().unwrap(), vec![svc.clone()]);
+        let h = crate::services::Hour { hour: 3600, checks: 2, ups: 1, latency_sum: 40., latency_n: 1 };
+        s.add_service_hours(&[(svc.id, h), (svc.id, h)]).unwrap();
+        assert_eq!(s.service_hours(svc.id, 0).unwrap(), vec![crate::services::Hour { hour: 3600, checks: 4, ups: 2, latency_sum: 80., latency_n: 2 }]);
+        s.open_incident(svc.id, 100, "HTTP 503").unwrap();
+        s.close_incident(svc.id, 160).unwrap();
+        let inc = s.incidents(None, 10).unwrap();
+        assert_eq!((inc[0].start, inc[0].end, inc[0].cause.as_str()), (100, Some(160), "HTTP 503"));
+        s.delete_device(7).unwrap();
+        assert_eq!(s.services().unwrap()[0].device, None, "the service outlives its device");
+        s.delete_service(svc.id).unwrap();
+        assert!(s.incidents(Some(svc.id), 10).unwrap().is_empty() && s.service_hours(svc.id, 0).unwrap().is_empty());
+        drop(s);
         // creating over an existing file starts empty
         let s = Store::create(&p).unwrap();
         assert!(s.load().unwrap().devices.is_empty());

@@ -34,7 +34,7 @@ fn parse_args() -> Result<Args, String> {
             "--save" => a.save = true,
             "--aws" => a.aws_profile = Some(it.next().ok_or_else(|| i18n::t!("cli.err.needs_value", flag = "--aws"))?),
             "--region" => a.regions.push(it.next().ok_or_else(|| i18n::t!("cli.err.needs_value", flag = "--region"))?),
-            "--layout" | "-o" | "--output" => {
+            "--layout" | "-o" | "--output" | "--name" | "--device" | "--interval" | "--keyword" | "--slow" | "--cert-days" | "--expect" => {
                 let k = x.trim_start_matches('-').to_string();
                 a.opts.push((k, it.next().ok_or_else(|| i18n::t!("cli.err.needs_value", flag = x.clone()))?));
             }
@@ -158,6 +158,102 @@ fn cmd_show(a: &Args) -> Result<(), String> {
     Ok(())
 }
 
+fn service_json(s: &nodo_core::services::ServiceCheck) -> serde_json::Value {
+    serde_json::json!({ "id": s.id, "name": s.name, "device": s.device, "kind": s.spec.kind.id(), "target": s.spec.target, "interval_s": s.spec.interval_s, "keyword": s.spec.keyword, "expect_status": s.spec.expect_status, "slow_ms": s.spec.slow_ms, "cert_days": s.spec.cert_days, "enabled": s.enabled })
+}
+
+/// `nodo services list|add|check`.
+fn cmd_services(a: &Args) -> Result<(), String> {
+    use nodo_core::services::{CheckKind, DAY, ServiceCheck, Spec};
+    let sub = a.rest.first().map(String::as_str).unwrap_or("list");
+    let path = map_path(a)?;
+    match sub {
+        "list" | "ls" => {
+            let s = Store::open_read_only(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let list = s.services().map_err(|e| e.to_string())?;
+            let now = nodo_core::time::now();
+            if a.json {
+                let v: Vec<serde_json::Value> = list
+                    .iter()
+                    .map(|x| {
+                        let h = s.service_hours(x.id, now - 31 * DAY).unwrap_or_default();
+                        let mut j = service_json(x);
+                        j["uptime"] = serde_json::json!({ "24h": nodo_core::services::uptime(&h, now, DAY), "7d": nodo_core::services::uptime(&h, now, 7 * DAY), "30d": nodo_core::services::uptime(&h, now, 30 * DAY) });
+                        j["incidents"] = serde_json::to_value(s.incidents(Some(x.id), 20).unwrap_or_default()).unwrap_or_default();
+                        j
+                    })
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+                return Ok(());
+            }
+            println!("{}{}{}{}{}", pad("ID", 6), pad(&i18n::t!("cli.col.name"), 26), pad(&i18n::t!("cli.col.kind"), 7), pad(&i18n::t!("cli.col.target"), 40), i18n::t!("cli.col.uptime")); // i18n-ok: column
+            for x in &list {
+                let h = s.service_hours(x.id, now - 31 * DAY).unwrap_or_default();
+                let up = |w: i64| nodo_core::services::uptime(&h, now, w).map(|u| format!("{:.2}%", u * 100.)).unwrap_or_else(|| "-".into()); // i18n-ok: number
+                println!("{}{}{}{}{} / {} / {}", pad(&x.id.to_string(), 6), pad(&x.name, 26), pad(x.spec.kind.id(), 7), pad(&x.spec.target, 40), up(DAY), up(7 * DAY), up(30 * DAY));
+            }
+            Ok(())
+        }
+        "add" => {
+            let kind = a.rest.get(1).and_then(|k| CheckKind::from_id(k)).ok_or_else(|| i18n::t!("cli.svc.add_needs"))?;
+            let target = a.rest.get(2).ok_or_else(|| i18n::t!("cli.svc.add_needs"))?;
+            let mut spec = Spec::new(kind, target);
+            let num = |k: &str| a.opt(k).and_then(|v| v.parse::<u32>().ok());
+            if let Some(i) = num("interval") {
+                spec.interval_s = i.clamp(10, 86400);
+            }
+            spec.keyword = a.opt("keyword").map(str::to_string);
+            spec.slow_ms = num("slow");
+            if let Some(c) = num("cert-days") {
+                spec.cert_days = Some(c);
+            }
+            spec.expect_status = a.opt("expect").and_then(|v| v.parse().ok());
+            let mut doc = Doc::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let device = match a.opt("device") {
+                Some(q) => Some(find(&doc.data, q)?.id),
+                None => None,
+            };
+            let name = a.opt("name").map(str::to_string).unwrap_or_else(|| target.clone());
+            let mut s = ServiceCheck { id: 0, name, device, spec, enabled: true };
+            s.id = doc.store.save_service(&s).map_err(|e| e.to_string())?;
+            if a.json {
+                println!("{}", serde_json::to_string_pretty(&service_json(&s)).unwrap_or_default());
+            } else {
+                println!("{}", i18n::t!("cli.svc.added", id = s.id, name = s.name.clone()));
+            }
+            Ok(())
+        }
+        "check" => {
+            let s = Store::open_read_only(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let list = s.services().map_err(|e| e.to_string())?;
+            let pick: Vec<&ServiceCheck> = match a.rest.get(1) {
+                Some(q) => list.iter().filter(|x| x.id.to_string() == *q || x.name.eq_ignore_ascii_case(q)).collect(),
+                None => list.iter().collect(),
+            };
+            if pick.is_empty() {
+                return Err(i18n::t!("cli.svc.none"));
+            }
+            let results: Vec<(&ServiceCheck, nodo_core::services::Outcome)> = std::thread::scope(|sc| {
+                let hs: Vec<_> = pick.iter().map(|x| sc.spawn(move || (*x, nodo_core::services::check(&x.spec, &nodo_core::probe::SystemProber)))).collect();
+                hs.into_iter().filter_map(|h| h.join().ok()).collect()
+            });
+            let failed = results.iter().any(|(_, o)| !o.ok);
+            if a.json {
+                let v: Vec<serde_json::Value> = results.iter().map(|(x, o)| serde_json::json!({ "service": service_json(x), "result": o })).collect();
+                println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+            } else {
+                for (x, o) in &results {
+                    let lat = o.latency_ms.map(|l| format!("{l:.0} ms")).unwrap_or_default(); // i18n-ok: unit
+                    let cert = o.cert_days.map(|d| i18n::t!("cli.svc.cert", days = d)).unwrap_or_default();
+                    println!("{} {}{}{} {}", if o.ok { "✓" } else { "✗" }, pad(&x.name, 26), pad(&lat, 10), o.detail, cert); // i18n-ok: marks
+                }
+            }
+            if failed { Err(String::new()) } else { Ok(()) }
+        }
+        other => Err(i18n::t!("cli.err.unknown", command = format!("services {other}"))),
+    }
+}
+
 fn cmd_scan(a: &Args) -> Result<(), String> {
     let mut d = Discovery::default();
     let any_source = a.flags.iter().any(|f| matches!(f.as_str(), "tailscale" | "wireguard")) || a.aws_profile.is_some();
@@ -249,6 +345,7 @@ fn main() -> ExitCode {
         "list" | "ls" => cmd_list(&a),
         "show" => cmd_show(&a),
         "scan" => cmd_scan(&a),
+        "services" | "svc" => cmd_services(&a),
         "export" => cmd_export(&a),
         "maps" => {
             for p in nodo_core::paths::recent() {
@@ -269,7 +366,9 @@ fn main() -> ExitCode {
     match r {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("{e}");
+            if !e.is_empty() {
+                eprintln!("{e}");
+            }
             ExitCode::FAILURE
         }
     }

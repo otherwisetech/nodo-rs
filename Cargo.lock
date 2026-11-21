@@ -4095,10 +4095,12 @@ dependencies = [
  "nodo-i18n",
  "ring",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "tempfile",
  "ureq",
+ "webpki-roots",
 ]
 
 [[package]]

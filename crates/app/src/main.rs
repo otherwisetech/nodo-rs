@@ -9,6 +9,7 @@ mod export_ui;
 mod launch;
 mod map_view;
 mod panel;
+mod services_ui;
 mod settings;
 mod share_ui;
 mod star;

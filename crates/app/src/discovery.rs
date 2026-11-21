@@ -480,6 +480,7 @@ impl NodoApp {
 
     pub fn start_monitor(&mut self, cx: &mut Context<Self>) {
         self.stop_monitor();
+        self.start_services();
         let engine = Engine::start(self.monitor_config(), self.targets(), Arc::new(nodo_core::probe::SystemProber), 16);
         engine.pause(self.mon.paused);
         self.mon.engine = Some(engine);
@@ -493,6 +494,7 @@ impl NodoApp {
                         return false;
                     }
                     this.drain_monitor(cx);
+                    this.drain_services(cx);
                     true
                 });
                 if !matches!(go, Ok(true)) {
@@ -507,6 +509,7 @@ impl NodoApp {
         if let Some(e) = self.mon.engine.take() {
             e.stop();
         }
+        self.stop_services();
         self.mon.loop_gen += 1;
         self.mon.states.clear();
     }
@@ -516,6 +519,7 @@ impl NodoApp {
         if let Some(e) = &self.mon.engine {
             e.pause(self.mon.paused);
         }
+        self.pause_services(self.mon.paused);
         self.toast(if self.mon.paused { i18n::t!("app.monitor.paused_toast") } else { i18n::t!("app.monitor.resumed_toast") }, cx);
     }
 

@@ -139,6 +139,8 @@ pub enum Sort {
 /// How the map is shown: graph or list, layout, layers, pan / zoom.
 pub struct ViewState {
     pub list: bool,
+    /// The Status view (monitored services) instead of the map / list.
+    pub status: bool,
     pub mode: Mode,
     pub layers: Vec<Layer>,
     pub zoom: f32,
@@ -160,6 +162,7 @@ impl ViewState {
         let s = crate::settings::Settings::load();
         ViewState {
             list: s.view.as_deref() == Some("list"),
+            status: false,
             mode: Mode::from_id(s.layout.as_deref().unwrap_or_default()),
             layers: Layer::ALL.into_iter().filter(|l| !s.hidden_layers.iter().any(|h| h == l.id())).collect(),
             zoom: 1.0,
@@ -219,6 +222,7 @@ pub struct NodoApp {
     detected: bool,
     pub recent: Vec<PathBuf>,
     pub share: crate::share_ui::ShareState,
+    pub svc: crate::services_ui::SvcUi,
     _subs: Vec<Subscription>,
 }
 
@@ -261,6 +265,7 @@ impl NodoApp {
             detected: false,
             recent: nodo_core::paths::recent(),
             share: Default::default(),
+            svc: Default::default(),
             _subs: subs,
         };
         this.start_share(cx);
@@ -544,6 +549,7 @@ impl NodoApp {
 
     pub fn set_list(&mut self, list: bool, cx: &mut Context<Self>) {
         self.view.list = list;
+        self.view.status = false;
         crate::settings::Settings::update(|s| s.view = Some(if list { "list" } else { "map" }.into())); // i18n-ok: setting value
         cx.notify();
     }

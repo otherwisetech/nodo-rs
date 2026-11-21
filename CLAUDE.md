@@ -17,7 +17,9 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               (ping / traceroute commands), remote.rs (SSH host / user / argv, device env), wol.rs,
               paths.rs (config dir, recent maps), shell_env.rs, this_computer.rs (which device
               is the computer running Nodo: interfaces, host name, Tailscale node; runtime only; its VM
-              bridges), vms.rs (VM / container runtimes running here, guest names)
+              bridges), vms.rs (VM / container runtimes running here, guest names), services.rs
+              (HTTP(S) / TCP / DNS / ICMP checks, TLS expiry from DER, Tracker state machine,
+              hourly buckets, Engine), share/ (file sharing, see below)
 crates/i18n   nodo-i18n: embedded translation catalogs, t!/tn!/tv! macros, i18n guard tests
 crates/cli    `nodo`: list / show / scan / export / maps, on the same core
 crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar, footer, About;
@@ -26,7 +28,8 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
               discovery, monitor engine polling, alerts, notifications; dialogs.rs; export_ui.rs;
               terminal/: embedded terminal (from plate: alacritty_terminal model, GPUI view, keys,
               colours; state.rs = pure dock / tab state; panel.rs = dock UI + SSH / ping tabs);
-              launch.rs: external terminals (from rama); star.rs: GitHub star (from rama)
+              launch.rs: external terminals (from rama); star.rs: GitHub star (from rama);
+              services_ui.rs: Status view, service dialog, badges; share_ui.rs: file sharing
 ```
 
 ## Rules
@@ -55,6 +58,8 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
   channel once a second, stops it on close). The engine and `Monitor` state machine are UI-free on
   purpose: a future menu-bar / background monitor should reuse `nodo_core::monitor::Engine` +
   `Doc` from its own small binary (or the CLI) rather than keep the window alive. Not built yet.
+  Services (`services::Engine`) start and stop with it, share its pause, and write only hourly
+  buckets (at most every 10 minutes) and incidents to the map (migration 3).
 - **i18n is mandatory.** No user-facing string literal in `app/src`, `core/src` or `cli/src`; use
   `i18n::t!` / `tn!` and add the key to **every** `crates/i18n/locales/<lang>/` catalog in the same
   change. Untranslatable literals end their line with `// i18n-ok`.

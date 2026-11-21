@@ -64,6 +64,8 @@ pub enum Dialog {
     Ask(crate::share_ui::AskReq),
     /// Transfers so far.
     Transfers,
+    /// Add or edit a monitored service.
+    Service(crate::services_ui::ServiceForm),
 }
 
 /// Title, body, OK label, danger, ready, OK action.
@@ -565,6 +567,7 @@ impl NodoApp {
                     }
                 }
             }
+            Dialog::Service(f) => (if f.id == 0 { i18n::t!("app.svc.add_title") } else { i18n::t!("app.svc.edit_title") }, self.service_form(f, t, cx), i18n::t!("app.dialog.save"), false, true, |this, _, cx| this.save_service(cx)),
             Dialog::Transfers => {
                 let h = crate::share_ui::history();
                 let mut b = div().flex().flex_col().gap(px(4.));

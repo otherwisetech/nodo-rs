@@ -25,6 +25,7 @@ pub mod paths;
 pub mod probe;
 pub mod remote;
 pub mod render;
+pub mod services;
 pub mod shell_env;
 pub mod share;
 pub mod time;

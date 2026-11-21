@@ -467,6 +467,7 @@ impl NodoApp {
                 info = info.child(kv(label, v.clone()));
             }
         }
+        info = info.child(self.device_services(t, id, cx));
         if !d.services.is_empty() {
             let svc: Vec<String> = d.services.iter().map(|s| match (&s.label, s.port) {
                 (Some(l), Some(p)) if !l.is_empty() => format!("{} :{p} — {l}", s.name), // i18n-ok: service line

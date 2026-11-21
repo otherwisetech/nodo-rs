@@ -112,7 +112,9 @@ impl NodoApp {
     pub(crate) fn render_map(&mut self, t: &Tokens, cx: &mut Context<Self>) -> AnyElement {
         let toolbar = self.map_toolbar(t, cx);
         let empty = self.doc.as_ref().is_some_and(|d| d.data.devices.is_empty());
-        let body = if empty {
+        let body = if self.view.status {
+            self.render_status(t, cx)
+        } else if empty {
             self.render_empty(t, cx)
         } else if self.view.list {
             self.map_list(t, cx)
@@ -140,10 +142,15 @@ impl NodoApp {
     }
 
     fn map_toolbar(&self, t: &Tokens, cx: &mut Context<Self>) -> Div {
-        let list = self.view.list;
+        let status = self.view.status;
+        let list = self.view.list && !status;
         let mode = ui::seg_group(t)
-            .child(ui::seg(t, "view-map", i18n::t!("app.view.map"), !list).on_click(cx.listener(|this, _, _, cx| this.set_list(false, cx))))
-            .child(ui::seg(t, "view-list", i18n::t!("app.view.list"), list).on_click(cx.listener(|this, _, _, cx| this.set_list(true, cx))));
+            .child(ui::seg(t, "view-map", i18n::t!("app.view.map"), !list && !status).on_click(cx.listener(|this, _, _, cx| this.set_list(false, cx))))
+            .child(ui::seg(t, "view-list", i18n::t!("app.view.list"), list).on_click(cx.listener(|this, _, _, cx| this.set_list(true, cx))))
+            .child(ui::seg(t, "view-status", i18n::t!("app.view.status"), status).on_click(cx.listener(|this, _, _, cx| {
+                this.view.status = true;
+                cx.notify();
+            })));
         let m = self.view.mode;
         let layout = ui::seg_group(t)
             .child(ui::seg(t, "lay-radial", i18n::t!("app.layout.radial"), m == Mode::Radial).on_click(cx.listener(|this, _, _, cx| this.set_mode(Mode::Radial, cx))))
@@ -207,8 +214,8 @@ impl NodoApp {
             .border_color(t.border)
             .bg(t.surface)
             .child(mode)
-            .when(!list, |d| d.child(layout))
-            .child(layers)
+            .when(!list && !status, |d| d.child(layout))
+            .when(!status, |d| d.child(layers))
             .when(list, |d| d.child(self.sort_menu(cx)))
             .child(div().flex_1())
             .when(alerts > 0, |d| {
@@ -234,7 +241,7 @@ impl NodoApp {
                 )
             })
             .child(monitor)
-            .when(!list, |d| d.child(zoom))
+            .when(!list && !status, |d| d.child(zoom))
     }
 
     fn sort_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -513,6 +520,7 @@ impl NodoApp {
         let id = d.id;
         let is_me = self.this_computer() == Some(id);
         let session = self.has_session(id, cx);
+        let svc = self.device_services_health(id);
         // "you are here": an accent halo around the circle, a pin, a badge under the name; the
         // badge keeps a legible minimum size when zoomed far out
         let halo = 9.;
@@ -532,6 +540,7 @@ impl NodoApp {
             .child(ui::kind_svg(d.kind.id(), 22. * zoom, if online { t.ink } else { t.ink_muted }))
             .child(div().absolute().top(z(-1.)).right(z(-1.)).size(z(12.)).rounded_full().border(z(2.)).border_color(t.surface).bg(crate::map_view::status_color(t, st)))
             .when(d.saved, |c| c.child(div().absolute().bottom(z(-2.)).right(z(-4.)).child(icon(IconName::Star, 11. * zoom, t.tag))))
+            .when_some(svc, |c, h| c.child(div().absolute().left(z(-5.)).top(z(CIRCLE / 2. - 6.)).size(z(12.)).rounded(z(3.)).border(z(1.5)).border_color(t.surface).bg(crate::services_ui::health_color(t, Some(h)))))
             .when(session, |c| c.child(div().absolute().bottom(z(-3.)).left(z(-4.)).size(z(16.)).rounded(z(4.)).flex().items_center().justify_center().bg(t.ink).border(z(1.5)).border_color(t.surface).child(icon(IconName::SquareTerminal, 10. * zoom, t.on_fill()))));
         let menu = self.device_menu(d, cx);
         div()
@@ -727,6 +736,7 @@ impl DeviceMenu {
             .item(self.item(i18n::t!("app.share.send_clipboard"), !self.is_me && ip, |this, id, _, cx| this.send_clipboard(id, cx)))
             .item(self.item(i18n::t!("app.share.send_taildrop"), !self.is_me && self.tailnet, |this, id, _, cx| this.send_taildrop(id, cx)))
             .separator()
+            .item(self.item(i18n::t!("app.svc.add_for"), true, |this, id, window, cx| this.open_service(None, None, Some(id), window, cx)))
             .item(self.item(if self.saved { i18n::t!("app.action.unsave") } else { i18n::t!("app.action.save") }, true, |this, id, _, cx| this.toggle_saved(id, cx)))
             .item(self.item(i18n::t!("app.action.edit"), true, |this, id, window, cx| this.start_edit(id, window, cx)))
             .item(self.item(i18n::t!("app.action.merge"), true, |this, id, window, cx| this.open_merge(id, window, cx)))
