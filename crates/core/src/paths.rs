@@ -109,8 +109,16 @@ pub fn is_temp(path: &Path) -> bool {
     path.starts_with(&tmp) || p.starts_with(canon(&tmp)) || ["/tmp", "/private/tmp", "/var/folders", "/private/var/folders", "/var/tmp"].iter().any(|t| p.starts_with(t)) // i18n-ok: paths
 }
 
+/// Nodo's folder in the Otherwise data root (`~/.otherwise/nodo` unless the user moved the
+/// root in Otherwise Apps), created if missing: the default home of new maps.
+pub fn data_dir() -> PathBuf {
+    let d = otherwise_link::paths::app_dir("nodo"); // i18n-ok: app id
+    let _ = std::fs::create_dir_all(&d);
+    d
+}
+
 /// Where a new map is offered: the folder of the most recent map that still exists and isn't
-/// in a temporary folder, else `fallback` (Documents).
+/// in a temporary folder, else `fallback` ([`data_dir`]).
 pub fn default_dir(recent: &[Recent], fallback: PathBuf) -> PathBuf {
     recent.iter().filter(|r| r.exists).filter_map(|r| r.path.parent()).find(|d| d.is_dir() && !is_temp(d)).map(Path::to_path_buf).unwrap_or(fallback)
 }

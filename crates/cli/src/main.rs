@@ -386,7 +386,7 @@ fn cmd_map(a: &Args) -> Result<(), String> {
     if to.extension().is_none() {
         to.set_extension(nodo_core::db::EXTENSION);
     }
-    let host = nodo_core::discover::hostname().unwrap_or_default();
+    let host = nodo_core::mapfile::host();
     nodo_core::mapfile::move_file(&from, &to, &host, nodo_core::time::now(), a.flags.iter().any(|f| f == "force")).map_err(|e| e.to_string())?;
     nodo_core::paths::replace_recent(&from, &to);
     println!("{}", i18n::t!("cli.map.moved", from = from.display(), to = to.display()));

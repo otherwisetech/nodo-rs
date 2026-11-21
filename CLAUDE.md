@@ -15,9 +15,10 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               positions: radial, by subnet, by network), export.rs (CSV / JSON / Mermaid, CSV
               import), render.rs (scene → SVG / PDF), mac.rs (+ data/oui.tsv.gz), tools.rs
               (ping / traceroute commands), remote.rs (SSH host / user / argv, device env), wol.rs,
-              paths.rs (config dir, recent maps incl. missing ones, default folder),
-              mapfile.rs (safe copy / move via VACUUM INTO + verify, cloud-folder detection,
-              lock file with heartbeat, conflict copies), shell_env.rs, this_computer.rs (which device
+              paths.rs (config dir, recent maps incl. missing ones, default folder:
+              `<Otherwise data root>/nodo`), mapfile.rs (safe copy / move via VACUUM INTO +
+              verify; cloud-folder detection, conflict names and the `<map>.lock.json` lock are
+              otherwise-link's `cloud` / `lock`, so Otherwise Apps sees open maps), shell_env.rs, this_computer.rs (which device
               is the computer running Nodo: interfaces, host name, Tailscale node; runtime only; its VM
               bridges), vms.rs (VM / container runtimes running here, guest names), services.rs
               (HTTP(S) / TCP / DNS / ICMP checks, TLS expiry from DER, Tracker state machine,
