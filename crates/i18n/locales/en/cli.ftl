@@ -36,3 +36,16 @@ cli.sync.off = The shared registry is off. Turn it on in Otherwise Apps.
 cli.sync.done = Shared registry: {pushed} sent, {unlinked} unlinked.
 cli.map.needs = Usage: nodo map move <from> <to> [--force]
 cli.map.moved = Moved {from} → {to}
+
+# background job (Otherwise Helper)
+cli.bg.monitor_label = Device and service monitor
+cli.bg.unknown_job = Unknown background job
+cli.bg.failed = couldn't read the map: {error}
+cli.bg.device_down = {device} is down
+cli.bg.device_up = {device} is back up
+cli.bg.service_down = {service} is failing
+cli.bg.service_up = {service} is working again
+cli.bg.down_status.one = {n} down
+cli.bg.down_status.other = {n} down
+cli.bg.up_status.one = {n} up
+cli.bg.up_status.other = all {n} up

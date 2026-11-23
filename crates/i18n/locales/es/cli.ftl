@@ -36,3 +36,16 @@ cli.sync.off = El registro compartido está desactivado. Actívalo en Otherwise 
 cli.sync.done = Registro compartido: {pushed} enviados, {unlinked} desvinculados.
 cli.map.needs = Uso: nodo map move <origen> <destino> [--force]
 cli.map.moved = Movido {from} → {to}
+
+# trabajo en segundo plano (Otherwise Helper)
+cli.bg.monitor_label = Monitor de dispositivos y servicios
+cli.bg.unknown_job = Trabajo en segundo plano desconocido
+cli.bg.failed = no se pudo leer el mapa: {error}
+cli.bg.device_down = {device} está caído
+cli.bg.device_up = {device} volvió a estar en línea
+cli.bg.service_down = {service} está fallando
+cli.bg.service_up = {service} vuelve a funcionar
+cli.bg.down_status.one = {n} caído
+cli.bg.down_status.other = {n} caídos
+cli.bg.up_status.one = {n} en línea
+cli.bg.up_status.other = los {n} en línea

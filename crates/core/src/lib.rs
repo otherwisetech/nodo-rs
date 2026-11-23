@@ -10,6 +10,7 @@
 //! - [`monitor`]: reachability state machine and the probing engine
 //! - [`export`] / [`render`]: CSV / JSON / Mermaid, SVG / PDF
 //! - [`this_computer`]: which device is the computer Nodo runs on (worked out at runtime)
+pub mod background;
 pub mod cidr;
 pub mod cmd;
 pub mod db;
