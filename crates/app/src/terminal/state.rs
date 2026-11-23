@@ -125,7 +125,7 @@ impl Layout {
         self.open = true;
     }
 
-    /// ⌘J: hide, or show (expanded) when hidden or collapsed.
+    /// ⌃` (Ctrl+Shift+J off macOS): hide, or show (expanded) when hidden or collapsed.
     pub fn toggle(&mut self) {
         if self.open && !self.collapsed {
             self.open = false;
@@ -266,7 +266,7 @@ mod tests {
         l.toggle_collapsed();
         assert_eq!(l.shown(1), Shown::Bar);
         l.toggle();
-        assert_eq!(l.shown(1), Shown::Docked(Dock::Bottom), "⌘J on the bar expands");
+        assert_eq!(l.shown(1), Shown::Docked(Dock::Bottom), "the toggle on the bar expands");
         l.toggle_maximized();
         assert_eq!(l.shown(1), Shown::Maximized);
         l.toggle();

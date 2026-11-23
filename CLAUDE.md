@@ -28,7 +28,7 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               background.rs (Otherwise Helper's monitor job)
 crates/i18n   nodo-i18n: embedded translation catalogs, t!/tn!/tv! macros, i18n guard tests
 crates/cli    `nodo`: list / show / scan / export / maps / map move / today / sync / mcp (mcp.rs: stdio MCP
-              server, read-only unless --allow-writes), on the same core
+              server, read-only unless --allow-writes or --propose), on the same core
 crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar, footer, About;
               map_view.rs: toolbar, graph canvas (rama's worktree-map approach), list;
               panel.rs: side panel, quick actions, edit form; discovery.rs: background
@@ -92,6 +92,14 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
   overlaps, monitor state machine, migrations. **No real network in tests** (use the `Prober`
   trait's fakes). Tests must pass on macOS, Linux and Windows: no assumptions about installed
   tools, paths or locale.
+- **The assistant is the shared AI panel** (`otherwise-agent-panel`, `app/src/assistant.rs`,
+  ⌘J; the embedded terminal's toggle is ⌃` on macOS): the user's Claude Code / Codex / opencode
+  with `nodo mcp --map <this window's map>` for that session only (never write the user's agent
+  configs). The panel never gets `--allow-writes`: outside "Solo lectura" it starts `--propose
+  <app dir>/assistant/live/<pid>-<window>/proposals`, where `update_device` / `add_service` only
+  validate and drop a `nodo_core::agent::Proposal`; the window polls it, shows cards and applies
+  them with the same builders (`agent::edited_device`, `new_service`) on Aplicar. A map open on
+  another computer gets read tools only.
 - In app test modules don't `use super::*` (gpui's glob exports its own `test` attribute).
 - External terminals get the exact command line shown before its first run (remembered per
   terminal + command in settings). Embedded tabs run `ssh` / `ping` with an argument list, never

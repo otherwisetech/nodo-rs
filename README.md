@@ -88,7 +88,7 @@ for scripts and AI agents.
   monitoring it runs only while the map is open; the map file keeps hourly counts (written at
   most every 10 minutes) and the incidents.
 - **Built-in terminal**: a tabbed panel (alacritty's terminal emulator) docked at the bottom or on
-  the right, resizable, collapsible to a bar or maximized (⌘T new shell, ⌘W close tab, ⌘J
+  the right, resizable, collapsible to a bar or maximized (⌘T new shell, ⌘W close tab, ⌃`
   show / hide, ⌘⇧↩ maximize). Tabs run your login shell with its environment. **SSH** opens a tab
   running `ssh user@host` (the device's *SSH user*; the host is its MagicDNS name or Tailscale
   address when it is on your tailnet, else its LAN address), **ping / traceroute** run in a tab,
@@ -130,6 +130,22 @@ for scripts and AI agents.
   *open in Nodo on another computer* instead of letting two computers edit at once, and conflict
   copies the sync client leaves next to the map (`… conflicted copy …`, `… 2.nodo`, `… (1).nodo`,
   OneDrive's `…-ComputerName.nodo`) are offered for review.
+
+## AI assistant (⌘J)
+
+The **Asistente** button (or ⌘J; the built-in terminal is ⌃` now) docks the shared Otherwise
+AI panel ([otherwise-agent-panel](https://github.com/otherwisetech/otherwise-agent-panel)) next
+to the map, as a bar, at the bottom, on the right or full window, in Chat or Terminal mode. It
+runs **your own** Claude Code, Codex or opencode with `nodo mcp` on this window's map for that
+session only; your agent's configuration is never changed. Try *¿Qué está caído y desde
+cuándo?*, *Resume los incidentes de esta semana*, *¿Qué certificados vencen pronto?* or
+*Explícame este mapa de red*.
+
+It reads device and service status, uptime and incidents, history, certificates and the
+network map. In *Preguntar antes de cambiar* or *Automático* it may propose renaming or
+labelling a device or adding a monitored service: each proposal is a card, applied only when you
+press *Aplicar*. What you ask and what the assistant reads (device names, addresses, history)
+goes to the provider you picked, with your own account; the panel says so under the input.
 
 ## Privacy
 
@@ -197,9 +213,11 @@ layer of the Otherwise Technologies apps. Everything stays on the computer.
   their *Location* as `site` cards; a device's *Owner* is shown as a company or person when the
   registry has one by that name. Pushed again only when something changed; devices taken out
   of the inventory are unlinked; merges and deletes made in Otherwise Apps are followed.
-- **MCP.** `nodo mcp` is a stdio MCP server, read-only: `devices`, `device`, `services`,
-  `status`. With `--allow-writes` (which Otherwise Apps' hub passes only when you allow write
-  tools) it adds `update_device` and `add_service`, each recorded in the device's history.
+- **MCP.** `nodo mcp` is a stdio MCP server, read-only: `status`, `services`, `incidents`,
+  `history`, `network_map`, `devices`, `device`. With `--allow-writes` (which Otherwise Apps' hub
+  passes only when you allow write tools) it adds `update_device` and `add_service`, each
+  recorded in the device's history; with `--propose <folder>` (the app's assistant) those two
+  only leave a proposal for the app.
 
 ## Download
 

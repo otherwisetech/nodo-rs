@@ -221,7 +221,7 @@ pub struct NodoApp {
     pub about: bool,
     toast: Option<(String, Instant)>,
     pub logo: Arc<Image>,
-    focus: FocusHandle,
+    pub focus: FocusHandle,
     placeholder_locale: &'static str,
     pub terminals: Rc<Vec<crate::launch::Term>>,
     detected: bool,
@@ -230,6 +230,8 @@ pub struct NodoApp {
     pub share: crate::share_ui::ShareState,
     pub svc: crate::services_ui::SvcUi,
     pub link: crate::otherwise::LinkState,
+    /// the AI panel and its cards
+    pub agent: crate::assistant::AgentState,
     _subs: Vec<Subscription>,
 }
 
@@ -280,9 +282,11 @@ impl NodoApp {
             share: Default::default(),
             svc: Default::default(),
             link: Default::default(),
+            agent: crate::assistant::AgentState::new(),
             _subs: subs,
         };
         this.start_share(cx);
+        this.start_agent_pump(cx);
         crate::star::refresh(crate::settings::Settings::load().github_stars(), cx);
         if let Some(p) = initial {
             this.open_path(p, window, cx);
@@ -552,6 +556,7 @@ impl NodoApp {
         if i18n::set_locale(code) {
             crate::settings::Settings::update(|s| s.language = Some(code.to_string()));
             gpui_component::set_locale(code);
+            crate::assistant::sync_locale();
             crate::set_app_menus(cx);
             cx.refresh_windows();
         }
@@ -709,6 +714,7 @@ impl NodoApp {
             .when(!ready, |d| {
                 d.child(ui::outline_button(t, "top-open").child(icon(IconName::FolderOpen, 15., t.ink)).child(i18n::t!("app.file.open")).on_click(cx.listener(|this, _, window, cx| this.open_dialog(window, cx))))
             })
+            .child(ui::icon_button(t, "top-assistant", IconName::Bot, true).tooltip(|w, cx| gpui_component::tooltip::Tooltip::new(i18n::t!("app.assistant.toggle")).build(w, cx)).on_click(cx.listener(|this, _, window, cx| this.toggle_agent_panel(window, cx))))
             .child(lang)
     }
 
@@ -985,6 +991,7 @@ impl Render for NodoApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_placeholder(window, cx);
         let t = tokens(cx);
+        NodoApp::sync_agent_style(&t, cx);
         let body: AnyElement = match &self.phase {
             Phase::Welcome => {
                 let narrow = crate::util::stacked(f32::from(window.viewport_size().width));

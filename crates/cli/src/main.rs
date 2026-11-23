@@ -37,7 +37,7 @@ fn parse_args() -> Result<Args, String> {
             "--save" => a.save = true,
             "--aws" => a.aws_profile = Some(it.next().ok_or_else(|| i18n::t!("cli.err.needs_value", flag = "--aws"))?),
             "--region" => a.regions.push(it.next().ok_or_else(|| i18n::t!("cli.err.needs_value", flag = "--region"))?),
-            "--layout" | "-o" | "--output" | "--name" | "--device" | "--interval" | "--keyword" | "--slow" | "--cert-days" | "--expect" => {
+            "--layout" | "-o" | "--output" | "--name" | "--device" | "--interval" | "--keyword" | "--slow" | "--cert-days" | "--expect" | "--propose" => {
                 let k = x.trim_start_matches('-').to_string();
                 a.opts.push((k, it.next().ok_or_else(|| i18n::t!("cli.err.needs_value", flag = x.clone()))?));
             }
@@ -76,22 +76,7 @@ pub(crate) fn device_json(d: &Device) -> serde_json::Value {
 /// A device by id, exact name, IP, MAC or host name (case-insensitive), else a unique
 /// substring of the name.
 pub(crate) fn find<'a>(m: &'a MapData, q: &str) -> Result<&'a Device, String> {
-    let ql = q.to_lowercase();
-    let mac = nodo_core::mac::normalize(q);
-    let exact: Vec<&Device> = m
-        .devices
-        .iter()
-        .filter(|d| d.id.to_string() == q || d.name.to_lowercase() == ql || d.ips().any(|i| i.to_string() == q) || mac.as_deref().is_some_and(|mm| d.macs().any(|x| x == mm)) || d.hostname.as_deref().is_some_and(|h| h.to_lowercase() == ql))
-        .collect();
-    if let [d] = exact.as_slice() {
-        return Ok(d);
-    }
-    let fuzzy: Vec<&Device> = m.devices.iter().filter(|d| d.name.to_lowercase().contains(&ql)).collect();
-    match fuzzy.as_slice() {
-        [d] => Ok(d),
-        [] if exact.is_empty() => Err(i18n::t!("cli.err.no_device", query = q)),
-        _ => Err(i18n::t!("cli.err.ambiguous", query = q, n = exact.len().max(fuzzy.len()))),
-    }
+    nodo_core::agent::find_device(m, q)
 }
 
 fn pad(s: &str, w: usize) -> String {
@@ -297,7 +282,8 @@ fn cmd_sync(a: &Args) -> Result<(), String> {
 
 fn cmd_mcp(a: &Args) -> Result<(), String> {
     let map = map_path(a)?;
-    let mut srv = mcp::Server { map, writes: a.flags.iter().any(|f| f == "allow-writes") };
+    let propose = a.opts.iter().rev().find(|(k, _)| k == "propose").map(|(_, v)| PathBuf::from(v));
+    let mut srv = mcp::Server { map, writes: a.flags.iter().any(|f| f == "allow-writes"), propose };
     srv.serve(std::io::stdin().lock(), std::io::stdout().lock()).map_err(|e| e.to_string())
 }
 
@@ -395,7 +381,7 @@ fn cmd_map(a: &Args) -> Result<(), String> {
 }
 
 fn main() -> ExitCode {
-    let lang = std::env::var("LC_ALL").ok().or_else(|| std::env::var("LANG").ok()).and_then(|l| i18n::match_system(&l)).unwrap_or("en");
+    let lang = std::env::var("NODO_LANG").ok().or_else(|| std::env::var("LC_ALL").ok()).or_else(|| std::env::var("LANG").ok()).and_then(|l| i18n::match_system(&l)).unwrap_or("en");
     i18n::set_locale(lang);
     nodo_core::shell_env::init();
     let argv: Vec<String> = std::env::args().skip(1).collect();

@@ -539,3 +539,24 @@ app.recent.missing_tip = {path} a été déplacé ou supprimé. Cliquez pour le 
 app.menu.help = Aide
 app.vcity.menu = Créez votre boutique sur Vcity
 app.vcity.invite = Vous vendez des produits ou des services ? Créez la boutique en ligne de votre entreprise sur Vcity : catalogue, commandes, paiements, réservations, chat avec les clients et bien plus.
+
+# AI panel (⌘J)
+app.assistant.toggle = Assistant (⌘J)
+app.assistant.card_update = Modifier {name}
+app.assistant.card_change = {field} : « {before} » → « {after} »
+app.assistant.field_name = Nom
+app.assistant.field_owner = Propriétaire
+app.assistant.field_location = Emplacement
+app.assistant.field_notes = Notes
+app.assistant.card_save = Enregistrer dans l'inventaire
+app.assistant.card_unsave = Retirer de l'inventaire
+app.assistant.card_service = Surveiller {name}
+app.assistant.card_device = Sur {name}
+app.assistant.card_reason = Motif : {reason}
+app.assistant.card_gone = Cette proposition n'est plus disponible.
+app.assistant.read_only = La carte est ouverte sur un autre ordinateur : impossible de la modifier ici.
+app.assistant.applied = Appliqué : {name}
+app.assistant.suggest_down = Qu'est-ce qui est en panne, et depuis quand ?
+app.assistant.suggest_incidents = Résume les incidents de cette semaine
+app.assistant.suggest_certs = Quels certificats expirent bientôt ?
+app.assistant.suggest_map = Explique-moi cette carte réseau
