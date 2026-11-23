@@ -24,7 +24,8 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               (HTTP(S) / TCP / DNS / ICMP checks, TLS expiry from DER, Tracker state machine,
               hourly buckets, Engine), share/ (file sharing, see below); otherwise-link
               integration: links.rs (deep-link routes, links into Vigía), feed.rs (Today
-              events, live or from the file), sync.rs (devices / sites → shared registry)
+              events, live or from the file), sync.rs (devices / sites → shared registry),
+              background.rs (Otherwise Helper's monitor job)
 crates/i18n   nodo-i18n: embedded translation catalogs, t!/tn!/tv! macros, i18n guard tests
 crates/cli    `nodo`: list / show / scan / export / maps / map move / today / sync / mcp (mcp.rs: stdio MCP
               server, read-only unless --allow-writes), on the same core
@@ -68,7 +69,14 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
 - **Monitoring runs only while a map is open** (`discovery.rs` starts `monitor::Engine`, polls its
   channel once a second, stops it on close). The engine and `Monitor` state machine are UI-free on
   purpose: a future menu-bar / background monitor should reuse `nodo_core::monitor::Engine` +
-  `Doc` from its own small binary (or the CLI) rather than keep the window alive. Not built yet.
+  `Doc` from its own small binary (or the CLI) rather than keep the window alive. With the app
+  closed, Otherwise Helper runs `nodo background run monitor` every 5 minutes (core
+  `background.rs`, cli `background.rs`; declared in the bundle's
+  `Contents/Resources/otherwise-background.json`): the most recent map, **read-only**, its saved
+  devices with monitoring on (ping, then their known ports; a miss is retried once) and its
+  enabled service checks — no discovery, no scan. Up / down per device and service lives in
+  its own `<data root>/nodo/background.json`; the first round is a baseline, then each change
+  is one notification.
   Services (`services::Engine`) start and stop with it, share its pause, and write only hourly
   buckets (at most every 10 minutes) and incidents to the map (migration 3).
 - **Otherwise Apps integration is opt-in or read-only.** The registry is touched only when

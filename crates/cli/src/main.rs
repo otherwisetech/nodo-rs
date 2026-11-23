@@ -1,5 +1,6 @@
 //! `nodo`: Nodo's maps from a terminal or an agent, without the window. Same core as the app:
 //! `nodo list --json`, `nodo show <device>`, `nodo scan --passive [--save]`.
+mod background;
 mod mcp;
 
 use nodo_core::db::{MapData, Store};
@@ -397,6 +398,10 @@ fn main() -> ExitCode {
     let lang = std::env::var("LC_ALL").ok().or_else(|| std::env::var("LANG").ok()).and_then(|l| i18n::match_system(&l)).unwrap_or("en");
     i18n::set_locale(lang);
     nodo_core::shell_env::init();
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.first().map(String::as_str) == Some("background") {
+        return ExitCode::from(background::run(&argv[1..]) as u8);
+    }
     let a = match parse_args() {
         Ok(a) => a,
         Err(e) => {

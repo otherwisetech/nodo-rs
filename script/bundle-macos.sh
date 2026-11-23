@@ -74,6 +74,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 plutil -lint -s "$app/Contents/Info.plist"
+# Background job for Otherwise Helper (device / service monitor), found here without registering.
+"$app/Contents/MacOS/nodo" background manifest > "$app/Contents/Resources/otherwise-background.json"
 # Make LaunchServices pick up the (possibly changed) icon.
 touch "$app"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app" || true

@@ -36,3 +36,16 @@ cli.sync.off = Le registre partagé est désactivé. Activez-le dans Otherwise A
 cli.sync.done = Registre partagé : {pushed} envoyés, {unlinked} détachés.
 cli.map.needs = Utilisation : nodo map move <source> <cible> [--force]
 cli.map.moved = Déplacé {from} → {to}
+
+# tâche en arrière-plan (Otherwise Helper)
+cli.bg.monitor_label = Surveillance des appareils et services
+cli.bg.unknown_job = Tâche en arrière-plan inconnue
+cli.bg.failed = lecture de la carte impossible : {error}
+cli.bg.device_down = {device} ne répond plus
+cli.bg.device_up = {device} répond de nouveau
+cli.bg.service_down = {service} est en échec
+cli.bg.service_up = {service} fonctionne de nouveau
+cli.bg.down_status.one = {n} hors ligne
+cli.bg.down_status.other = {n} hors ligne
+cli.bg.up_status.one = {n} en ligne
+cli.bg.up_status.other = les {n} en ligne
