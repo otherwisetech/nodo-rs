@@ -3,6 +3,7 @@
 #![recursion_limit = "512"]
 
 mod app;
+mod assistant;
 mod dialogs;
 mod discovery;
 mod export_ui;
@@ -229,6 +230,9 @@ fn main() {
         #[cfg(target_os = "macos")]
         set_dock_icon();
         gpui_component::init(cx);
+        otherwise_agent_panel::ui::init(cx);
+        assistant::sync_locale();
+        cx.on_app_quit(|_| async { assistant::remove_live_dirs() }).detach();
         app::sync_theme(None, cx);
         terminal::panel::sync_style(cx);
         terminal::panel::bind_keys(cx);
@@ -291,7 +295,12 @@ pub(crate) fn open_window(path: Option<PathBuf>, new_map: bool, cx: &mut App) {
     cx.spawn(async move |cx| {
         cx.open_window(window_options, |window, cx| {
             let view = cx.new(|cx| app::NodoApp::new(path, new_map, window, cx));
-            cx.new(|cx| Root::new(view, window, cx))
+            let focus = view.read(cx).focus.clone();
+            let host: std::rc::Rc<dyn otherwise_agent_panel::ui::AgentHost> = std::rc::Rc::new(assistant::Host { app: view.downgrade() });
+            let dock = cx.new(|cx| otherwise_agent_panel::ui::AgentDock::new(view.clone(), Some(focus), host, window, cx));
+            let panel = dock.read(cx).panel().downgrade();
+            view.update(cx, |v, _| v.agent.panel = Some(panel));
+            cx.new(|cx| Root::new(dock, window, cx))
         })
         .expect("open window");
     })

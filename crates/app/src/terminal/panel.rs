@@ -23,12 +23,13 @@ actions!(nodo_terminal, [NewTerminal, CloseTerminalTab, ToggleTerminal, ToggleTe
 mod keys {
     pub const NEW: &str = "cmd-t";
     pub const CLOSE: &str = "cmd-w";
-    pub const TOGGLE: &str = "cmd-j";
+    // ⌘J is the AI panel's, as in every Otherwise app
+    pub const TOGGLE: &str = "ctrl-`";
     pub const MAXIMIZE: &str = "cmd-shift-enter";
     pub const NEXT: &[&str] = &["cmd-}", "cmd-shift-]"];
     pub const PREV: &[&str] = &["cmd-{", "cmd-shift-["];
     pub const NEW_LABEL: &str = "⌘T"; // i18n-ok: shortcut
-    pub const TOGGLE_LABEL: &str = "⌘J"; // i18n-ok: shortcut
+    pub const TOGGLE_LABEL: &str = "⌃`"; // i18n-ok: shortcut
     pub const CLOSE_LABEL: &str = "⌘W"; // i18n-ok: shortcut
     pub const MAXIMIZE_LABEL: &str = "⌘⇧↩"; // i18n-ok: shortcut
 }

@@ -539,3 +539,24 @@ app.recent.missing_tip = {path} was moved or deleted. Click to locate it.
 app.menu.help = Help
 app.vcity.menu = Create your store on Vcity
 app.vcity.invite = Sell products or services? Create your business's online store on Vcity — catalog, orders, payments, bookings, customer chat and more.
+
+# AI panel (⌘J)
+app.assistant.toggle = Assistant (⌘J)
+app.assistant.card_update = Change {name}
+app.assistant.card_change = {field}: “{before}” → “{after}”
+app.assistant.field_name = Name
+app.assistant.field_owner = Owner
+app.assistant.field_location = Location
+app.assistant.field_notes = Notes
+app.assistant.card_save = Save in the inventory
+app.assistant.card_unsave = Remove from the inventory
+app.assistant.card_service = Watch {name}
+app.assistant.card_device = On {name}
+app.assistant.card_reason = Reason: {reason}
+app.assistant.card_gone = This proposal is no longer available.
+app.assistant.read_only = The map is open on another computer: it can't be changed here.
+app.assistant.applied = Applied: {name}
+app.assistant.suggest_down = What is down, and since when?
+app.assistant.suggest_incidents = Summarize this week's incidents
+app.assistant.suggest_certs = Which certificates expire soon?
+app.assistant.suggest_map = Explain this network map to me

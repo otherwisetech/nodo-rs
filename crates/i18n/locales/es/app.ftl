@@ -539,3 +539,24 @@ app.recent.missing_tip = {path} se movió o se borró. Haz clic para buscarlo.
 app.menu.help = Ayuda
 app.vcity.menu = Crea tu tienda en Vcity
 app.vcity.invite = ¿Vendes productos o servicios? Crea la tienda virtual de tu empresa en Vcity: catálogo, pedidos, pagos, reservas, chat con clientes y mucho más.
+
+# AI panel (⌘J)
+app.assistant.toggle = Asistente (⌘J)
+app.assistant.card_update = Cambiar {name}
+app.assistant.card_change = {field}: «{before}» → «{after}»
+app.assistant.field_name = Nombre
+app.assistant.field_owner = Dueño
+app.assistant.field_location = Ubicación
+app.assistant.field_notes = Notas
+app.assistant.card_save = Guardar en el inventario
+app.assistant.card_unsave = Quitar del inventario
+app.assistant.card_service = Vigilar {name}
+app.assistant.card_device = En {name}
+app.assistant.card_reason = Motivo: {reason}
+app.assistant.card_gone = Esta propuesta ya no está disponible.
+app.assistant.read_only = El mapa está abierto en otra computadora: aquí no se puede cambiar.
+app.assistant.applied = Aplicado: {name}
+app.assistant.suggest_down = ¿Qué está caído y desde cuándo?
+app.assistant.suggest_incidents = Resume los incidentes de esta semana
+app.assistant.suggest_certs = ¿Qué certificados vencen pronto?
+app.assistant.suggest_map = Explícame este mapa de red
