@@ -130,6 +130,10 @@ impl NodoApp {
             self.file.lock = MapLock::take(&path, &host(), now).ok();
             cx.notify();
         }
+        // the sync client may have put a new file at the path: read that one
+        if self.doc.as_mut().is_some_and(|d| d.refresh().unwrap_or(false)) {
+            cx.notify();
+        }
         let c = mapfile::conflict_copies(&path);
         if c != self.file.conflicts {
             self.file.conflicts = c;

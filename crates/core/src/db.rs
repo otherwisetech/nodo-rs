@@ -96,6 +96,16 @@ pub enum StoreError {
     TooNew(i64),
     /// `PRAGMA integrity_check` failed.
     Corrupt(String),
+    /// The file can't be written (read-only file or folder); it can still be read.
+    ReadOnly,
+}
+
+impl StoreError {
+    /// SQLite refused a write because of the file: read-only, or replaced under the open
+    /// connection (`SQLITE_READONLY_DBMOVED`, what a sync client's rename over the file gives).
+    pub fn is_read_only(&self) -> bool {
+        matches!(self, StoreError::ReadOnly) || matches!(self, StoreError::Sqlite(rusqlite::Error::SqliteFailure(c, _)) if c.code == rusqlite::ErrorCode::ReadOnly)
+    }
 }
 
 impl std::fmt::Display for StoreError {
@@ -106,6 +116,7 @@ impl std::fmt::Display for StoreError {
             StoreError::NotNodo => write!(f, "{}", i18n::t!("core.db.not_nodo")),
             StoreError::TooNew(v) => write!(f, "{}", i18n::t!("core.db.too_new", version = v)),
             StoreError::Corrupt(d) => write!(f, "{}", i18n::t!("core.db.corrupt", detail = d)),
+            StoreError::ReadOnly => write!(f, "{}", i18n::t!("core.db.read_only")),
         }
     }
 }
@@ -167,6 +178,25 @@ impl MapData {
 pub struct Store {
     conn: Connection,
     path: PathBuf,
+    /// Opened for writing (not [`Store::open_read_only`]).
+    writable: bool,
+    /// Which file `conn` has open (device, inode), to notice when the path points to another.
+    file: Option<(u64, u64)>,
+}
+
+/// (device, inode) of the file at `path`; `None` where there is no such notion (Windows, where
+/// an open file can't be replaced anyway).
+fn file_id(path: &Path) -> Option<(u64, u64)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
+    }
 }
 
 fn to_json<T: serde::Serialize>(v: &T) -> String {
@@ -187,7 +217,7 @@ impl Store {
         }
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "application_id", APPLICATION_ID)?;
-        let mut s = Store { conn, path: path.to_path_buf() };
+        let mut s = Store { conn, path: path.to_path_buf(), writable: true, file: file_id(path) };
         s.configure()?;
         s.migrate()?;
         s.set_meta("created", &crate::time::now().to_string())?;
@@ -209,7 +239,7 @@ impl Store {
         if version > latest_version() {
             return Err(StoreError::TooNew(version));
         }
-        let mut s = Store { conn, path: path.to_path_buf() };
+        let mut s = Store { conn, path: path.to_path_buf(), writable: true, file: file_id(path) };
         s.configure()?;
         s.migrate()?;
         Ok(s)
@@ -226,11 +256,52 @@ impl Store {
         if version > latest_version() {
             return Err(StoreError::TooNew(version));
         }
-        Ok(Store { conn, path: path.to_path_buf() })
+        Ok(Store { conn, path: path.to_path_buf(), writable: false, file: file_id(path) })
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// SQLite could only open the file for reading (it does so silently when the file or its
+    /// folder can't be written), or it was opened read-only: writes would fail.
+    pub fn is_read_only(&self) -> bool {
+        !self.writable || self.conn.is_readonly(rusqlite::MAIN_DB).unwrap_or(false)
+    }
+
+    /// The path now holds another file than the one open. Sync clients (OneDrive's and
+    /// Dropbox's File Provider on macOS) save a version by renaming a new file over it; the old
+    /// connection keeps the unlinked file and SQLite refuses writes to it ("attempt to write a
+    /// readonly database").
+    pub fn replaced(&self) -> bool {
+        self.file.is_some() && file_id(&self.path).is_some_and(|now| Some(now) != self.file)
+    }
+
+    /// Opens the file at the path again, the same way it was opened.
+    pub fn reopen(&mut self) -> Result<()> {
+        *self = if self.writable { Store::open(&self.path)? } else { Store::open_read_only(&self.path)? };
+        Ok(())
+    }
+
+    /// Reopens when the file was replaced; true when it did (the caller reloads).
+    pub fn refresh(&mut self) -> Result<bool> {
+        if !self.replaced() {
+            return Ok(false);
+        }
+        self.reopen()?;
+        Ok(true)
+    }
+
+    /// Before each write: the file at the path, and one that can be written.
+    fn ready(&mut self) -> Result<()> {
+        self.refresh()?;
+        if self.writable && self.conn.is_readonly(rusqlite::MAIN_DB).unwrap_or(false) {
+            self.reopen()?;
+        }
+        if self.is_read_only() {
+            return Err(StoreError::ReadOnly);
+        }
+        Ok(())
     }
 
     /// A consistent, compacted copy of the open map at `dest` (`VACUUM INTO`; `dest` must not
@@ -284,6 +355,7 @@ impl Store {
     }
 
     pub fn set_meta(&mut self, key: &str, value: &str) -> Result<()> {
+        self.ready()?;
         self.conn.execute("INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value", params![key, value])?;
         Ok(())
     }
@@ -359,6 +431,7 @@ impl Store {
     }
 
     pub fn save_network(&mut self, n: &Network) -> Result<()> {
+        self.ready()?;
         self.conn.execute(
             "INSERT INTO networks (id, key, name, layer, cidr, gateway, parent, facts) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(id) DO UPDATE SET key = excluded.key, name = excluded.name, layer = excluded.layer, cidr = excluded.cidr,
@@ -369,12 +442,14 @@ impl Store {
     }
 
     pub fn delete_network(&mut self, id: NetworkId) -> Result<()> {
+        self.ready()?;
         self.conn.execute("DELETE FROM networks WHERE id = ?1", [id])?;
         Ok(())
     }
 
     /// Insert or replace one device with its addresses and identities, atomically.
     pub fn save_device(&mut self, d: &Device) -> Result<()> {
+        self.ready()?;
         let tx = self.conn.transaction()?;
         tx.execute(
             "INSERT INTO devices (id, name, name_manual, kind, kind_manual, owner, location, notes, tags, links, fields, saved, monitor, vendor, hostname, os, model, services, facts, first_seen, last_seen, online)
@@ -421,17 +496,20 @@ impl Store {
     }
 
     pub fn delete_device(&mut self, id: DeviceId) -> Result<()> {
+        self.ready()?;
         self.conn.execute("DELETE FROM devices WHERE id = ?1", [id])?;
         Ok(())
     }
 
     /// Move a device's history onto another one (after a merge).
     pub fn move_events(&mut self, from: DeviceId, to: DeviceId) -> Result<()> {
+        self.ready()?;
         self.conn.execute("UPDATE events SET device = ?2 WHERE device = ?1", params![from, to])?;
         Ok(())
     }
 
     pub fn add_event(&mut self, device: Option<DeviceId>, at: i64, kind: EventKind, detail: &str) -> Result<i64> {
+        self.ready()?;
         self.conn.execute("INSERT INTO events (device, at, kind, detail) VALUES (?1, ?2, ?3, ?4)", params![device, at, kind.id(), detail])?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -466,6 +544,7 @@ impl Store {
 
     /// Insert (`id` 0) or update; returns the id.
     pub fn save_service(&mut self, s: &crate::services::ServiceCheck) -> Result<i64> {
+        self.ready()?;
         let spec = serde_json::to_string(&s.spec).unwrap_or_default();
         if s.id == 0 {
             self.conn.execute("INSERT INTO services (name, device, spec, enabled) VALUES (?1, ?2, ?3, ?4)", params![s.name, s.device, spec, s.enabled])?;
@@ -476,12 +555,14 @@ impl Store {
     }
 
     pub fn delete_service(&mut self, id: i64) -> Result<()> {
+        self.ready()?;
         self.conn.execute("DELETE FROM services WHERE id = ?1", params![id])?;
         Ok(())
     }
 
     /// Add a batch of checks to the hour buckets (one small transaction).
     pub fn add_service_hours(&mut self, rows: &[(i64, crate::services::Hour)]) -> Result<()> {
+        self.ready()?;
         let tx = self.conn.transaction()?;
         for (svc, h) in rows {
             tx.execute(
@@ -501,12 +582,14 @@ impl Store {
     }
 
     pub fn open_incident(&mut self, service: i64, start: i64, cause: &str) -> Result<i64> {
+        self.ready()?;
         self.conn.execute("INSERT INTO service_incidents (service, start, cause) VALUES (?1, ?2, ?3)", params![service, start, cause])?;
         Ok(self.conn.last_insert_rowid())
     }
 
     /// Close the service's open incident, if any.
     pub fn close_incident(&mut self, service: i64, end: i64) -> Result<()> {
+        self.ready()?;
         self.conn.execute("UPDATE service_incidents SET end = ?2 WHERE service = ?1 AND end IS NULL", params![service, end])?;
         Ok(())
     }
@@ -525,17 +608,20 @@ impl Store {
     }
 
     pub fn set_shared_link(&mut self, kind: &str, local: &str, shared_id: &str, card: &str) -> Result<()> {
+        self.ready()?;
         self.conn.execute("INSERT INTO shared_links (kind, local, shared_id, card) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(kind, local) DO UPDATE SET shared_id = excluded.shared_id, card = excluded.card", params![kind, local, shared_id, card])?;
         Ok(())
     }
 
     pub fn delete_shared_link(&mut self, kind: &str, local: &str) -> Result<()> {
+        self.ready()?;
         self.conn.execute("DELETE FROM shared_links WHERE kind = ?1 AND local = ?2", params![kind, local])?;
         Ok(())
     }
 
     /// Links to card `from` now point at `to` (merged in the registry).
     pub fn repoint_shared(&mut self, from: &str, to: &str) -> Result<usize> {
+        self.ready()?;
         Ok(self.conn.execute("UPDATE shared_links SET shared_id = ?2 WHERE shared_id = ?1", params![from, to])?)
     }
 
@@ -577,6 +663,59 @@ mod tests {
             online: Some(true),
             ..Default::default()
         }
+    }
+
+    /// What OneDrive's File Provider does after a sync: a new file renamed over the open one.
+    #[cfg(unix)]
+    #[test]
+    fn writes_survive_the_file_being_replaced_by_a_sync_client() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("home.nodo");
+        let mut s = Store::create(&path).unwrap();
+        s.save_network(&Network { id: 1, name: "Home".into(), layer: Layer::Lan, cidr: Some("192.168.1.0/24".into()), gateway: None, parent: None, key: "lan:192.168.1.0/24".into(), facts: vec![] }).unwrap();
+        s.save_device(&device(1)).unwrap();
+        let replace = || {
+            let tmp = dir.path().join(".home.nodo.sync");
+            std::fs::copy(&path, &tmp).unwrap();
+            std::fs::rename(&tmp, &path).unwrap();
+        };
+        replace();
+        assert!(s.replaced());
+        s.save_device(&device(2)).unwrap();
+        assert!(!s.replaced());
+        replace();
+        assert!(s.refresh().unwrap());
+        s.add_event(Some(2), 10, EventKind::Down, "").unwrap();
+        let back = Store::open(&path).unwrap();
+        assert_eq!(back.load().unwrap().devices.len(), 2, "written to the file at the path");
+        assert_eq!(back.events(Some(2), 10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_read_only_file_is_reported_not_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("home.nodo");
+        {
+            let mut s = Store::create(&path).unwrap();
+            s.save_network(&Network { id: 1, name: "Home".into(), layer: Layer::Lan, cidr: Some("192.168.1.0/24".into()), gateway: None, parent: None, key: "lan:192.168.1.0/24".into(), facts: vec![] }).unwrap();
+        }
+        let mut perm = std::fs::metadata(&path).unwrap().permissions();
+        perm.set_readonly(true);
+        std::fs::set_permissions(&path, perm.clone()).unwrap();
+        // running as root (some CI containers) writes anyway: nothing to check there
+        if std::fs::OpenOptions::new().write(true).open(&path).is_ok() {
+            return;
+        }
+        let mut s = Store::open(&path).unwrap();
+        assert!(s.is_read_only());
+        let e = s.save_device(&device(1)).unwrap_err();
+        assert!(matches!(e, StoreError::ReadOnly), "{e}");
+        assert_eq!(e.to_string(), i18n::t!("core.db.read_only"));
+        #[allow(clippy::permissions_set_readonly_false)]
+        perm.set_readonly(false);
+        std::fs::set_permissions(&path, perm).unwrap();
+        s.save_device(&device(1)).unwrap();
+        assert!(!s.is_read_only());
     }
 
     #[test]

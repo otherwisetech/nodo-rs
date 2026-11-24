@@ -18,6 +18,7 @@ core.ssdp.failed = SSDP search failed: {detail}
 core.db.not_database = This file is not a Nodo map (not a database).
 core.db.error = Map file error: {detail}
 core.db.not_nodo = This database is not a Nodo map.
+core.db.read_only = This map can't be written: the file or its folder is read-only. Nothing was saved. Check the file's permissions, or that the sync app isn't holding it, and open it again.
 core.db.too_new = This map was made by a newer version of Nodo (format {version}). Update Nodo to open it.
 core.db.corrupt = The map file is damaged: {detail}
 core.import.empty = The file is empty.

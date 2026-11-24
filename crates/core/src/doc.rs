@@ -56,6 +56,16 @@ impl Doc {
         Ok(old)
     }
 
+    /// Rereads the map when the sync client put a new file at the path (see
+    /// [`Store::refresh`]); true when it did.
+    pub fn refresh(&mut self) -> Result<bool> {
+        if !self.store.refresh()? {
+            return Ok(false);
+        }
+        self.data = self.store.load()?;
+        Ok(true)
+    }
+
     pub fn title(&self) -> String {
         self.store.path().file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
     }

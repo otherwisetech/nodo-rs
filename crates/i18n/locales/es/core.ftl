@@ -18,6 +18,7 @@ core.ssdp.failed = Falló la búsqueda SSDP: {detail}
 core.db.not_database = Este archivo no es un mapa de Nodo (no es una base de datos).
 core.db.error = Error del archivo de mapa: {detail}
 core.db.not_nodo = Esta base de datos no es un mapa de Nodo.
+core.db.read_only = No se puede escribir en este mapa: el archivo o su carpeta son de solo lectura. No se guardó nada. Revisa los permisos del archivo, o que la app de sincronización no lo esté reteniendo, y ábrelo de nuevo.
 core.db.too_new = Este mapa lo creó una versión más nueva de Nodo (formato {version}). Actualiza Nodo para abrirlo.
 core.db.corrupt = El archivo de mapa está dañado: {detail}
 core.import.empty = El archivo está vacío.
