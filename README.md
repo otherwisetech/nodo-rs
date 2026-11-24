@@ -136,8 +136,8 @@ for scripts and AI agents.
 The **Asistente** button (or ⌘J; the built-in terminal is ⌃` now) docks the shared Otherwise
 AI panel ([otherwise-agent-panel](https://github.com/otherwisetech/otherwise-agent-panel)) next
 to the map, as a bar, at the bottom, on the right or full window, in Chat or Terminal mode. It
-runs **your own** Claude Code, Codex or opencode with `nodo mcp` on this window's map for that
-session only; your agent's configuration is never changed. Try *¿Qué está caído y desde
+runs **your own** Claude Code, Codex or opencode, or a model of your own **Ollama** on this
+computer, with `nodo mcp` on this window's map for that session only; your agent's configuration is never changed. Try *¿Qué está caído y desde
 cuándo?*, *Resume los incidentes de esta semana*, *¿Qué certificados vencen pronto?* or
 *Explícame este mapa de red*.
 
@@ -145,7 +145,8 @@ It reads device and service status, uptime and incidents, history, certificates 
 network map. In *Preguntar antes de cambiar* or *Automático* it may propose renaming or
 labelling a device or adding a monitored service: each proposal is a card, applied only when you
 press *Aplicar*. What you ask and what the assistant reads (device names, addresses, history)
-goes to the provider you picked, with your own account; the panel says so under the input.
+goes to the provider you picked, with your own account (with Ollama it stays on this computer);
+the panel says so under the input.
 
 ## Privacy
 
