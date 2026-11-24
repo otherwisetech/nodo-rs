@@ -18,6 +18,7 @@ core.ssdp.failed = La recherche SSDP a échoué : {detail}
 core.db.not_database = Ce fichier n'est pas une carte Nodo (ce n'est pas une base de données).
 core.db.error = Erreur du fichier de carte : {detail}
 core.db.not_nodo = Cette base de données n'est pas une carte Nodo.
+core.db.read_only = Impossible d’écrire dans cette carte : le fichier ou son dossier est en lecture seule. Rien n’a été enregistré. Vérifiez les autorisations du fichier, ou que l’app de synchronisation ne le retient pas, puis rouvrez-la.
 core.db.too_new = Cette carte vient d'une version plus récente de Nodo (format {version}). Mettez Nodo à jour pour l'ouvrir.
 core.db.corrupt = Le fichier de carte est endommagé : {detail}
 core.import.empty = Le fichier est vide.
