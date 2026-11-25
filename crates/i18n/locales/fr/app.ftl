@@ -14,9 +14,10 @@ app.menu.export = Exporter
 app.menu.close = Fermer la carte
 app.credit.menu = Site de {company}
 app.about.menu = À propos de {app}
-app.about.footer = {app} {version} · {company} · À propos
+app.about.footer_link = À propos
+app.privacy.local = Vos données restent sur cet ordinateur
 app.about.description = Cartographiez et suivez les appareils de vos réseaux — LAN, Tailscale, AWS et WireGuard — sous forme de graphe vivant. Tout reste sur votre ordinateur.
-app.about.by = Développé par {company}
+app.about.by = Réalisé par {company}
 app.about.place = Wyoming, États-Unis
 app.about.visit = Visiter otherwisetech.com
 app.about.source = Code source
@@ -480,11 +481,11 @@ app.svc.add_for = Surveiller un service…
 app.svc.add_title = Nouveau service
 app.svc.edit_title = Modifier le service
 
-# Otherwise Apps: Today view, shared registry, deep links, Vigía
-app.settings.otherwise = Otherwise Apps
-app.settings.today = Afficher les appareils et services qui demandent attention dans la vue Aujourd'hui d'Otherwise Apps
-app.settings.registry_on = Les appareils enregistrés et leurs lieux sont partagés avec les autres apps Otherwise (activé dans Otherwise Apps).
-app.settings.registry_off = Le partage des appareils avec les autres apps Otherwise est désactivé ; il s'active dans Otherwise Apps.
+# Otherwise Hub: Today view, shared registry, deep links, Vigía
+app.settings.otherwise = Otherwise Hub
+app.settings.today = Afficher les appareils et services qui demandent attention dans la vue Aujourd'hui d'Otherwise Hub
+app.settings.registry_on = Les appareils enregistrés et leurs lieux sont partagés avec les autres apps Otherwise (activé dans Otherwise Hub).
+app.settings.registry_off = Le partage des appareils avec les autres apps Otherwise est désactivé ; il s'active dans Otherwise Hub.
 app.link.not_found = Cela n'est pas dans cette carte.
 app.link.unknown = Nodo ne peut pas ouvrir ce lien : {url}
 app.link.owner_company = entreprise

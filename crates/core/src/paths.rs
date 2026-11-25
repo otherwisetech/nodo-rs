@@ -110,7 +110,7 @@ pub fn is_temp(path: &Path) -> bool {
 }
 
 /// Nodo's folder in the Otherwise data root (`~/.otherwise/nodo` unless the user moved the
-/// root in Otherwise Apps), created if missing: the default home of new maps.
+/// root in Otherwise Hub), created if missing: the default home of new maps.
 pub fn data_dir() -> PathBuf {
     let d = otherwise_link::paths::app_dir("nodo"); // i18n-ok: app id
     let _ = std::fs::create_dir_all(&d);

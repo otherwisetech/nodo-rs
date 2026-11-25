@@ -45,7 +45,7 @@ core.svc.open = Port {port} ouvert
 core.svc.dns_mismatch = Résout en {got}
 core.svc.no_reply = Pas de réponse
 
-# Otherwise Apps: Today view and shared registry
+# Otherwise Hub: Today view and shared registry
 core.sync.error = Registre partagé : {detail}
 core.today.device_down = {name} est hors ligne
 core.today.service_down = {name} est hors service

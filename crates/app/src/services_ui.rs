@@ -287,7 +287,7 @@ impl NodoApp {
 
     pub(crate) fn service_form(&self, f: &ServiceForm, t: &Tokens, cx: &mut Context<Self>) -> AnyElement {
         let label = |s: String| div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).child(s);
-        let hint = |s: String| div().text_size(px(11.5)).text_color(t.ink_muted).child(s);
+        let hint = |s: String| div().text_size(px(12.)).text_color(t.ink_muted).child(s);
         let mut kinds = ui::seg_group(t);
         for k in CheckKind::ALL {
             kinds = kinds.child(ui::seg(t, ("svc-kind", k as usize), kind_label(k), f.kind == k).on_click(cx.listener(move |this, _, _, cx| {
@@ -392,7 +392,7 @@ impl NodoApp {
                     .px(px(12.))
                     .border_b_1()
                     .border_color(t.border.opacity(0.5))
-                    .text_size(px(12.5))
+                    .text_size(px(13.))
                     .hover(move |x| x.bg(hover))
                     .when(!s.enabled, |r| r.opacity(0.5))
                     .child(
@@ -413,12 +413,12 @@ impl NodoApp {
                                     .child(div().flex().gap(px(6.)).text_size(px(11.)).text_color(t.ink_muted).child(div().font_family(MONO).truncate().child(s.spec.target.clone())).child(div().truncate().child(detail))),
                             ),
                     )
-                    .child(div().w(px(90.)).flex_none().font_family(MONO).text_size(px(11.5)).when(last.as_ref().is_some_and(|o| o.slow), |d| d.text_color(t.danger)).child(last.as_ref().and_then(|o| o.latency_ms).map(|l| format!("{l:.0} ms")).unwrap_or_else(|| "–".into()))) // i18n-ok: unit
+                    .child(div().w(px(90.)).flex_none().font_family(MONO).text_size(px(12.)).when(last.as_ref().is_some_and(|o| o.slow), |d| d.text_color(t.danger)).child(last.as_ref().and_then(|o| o.latency_ms).map(|l| format!("{l:.0} ms")).unwrap_or_else(|| "–".into()))) // i18n-ok: unit
                     .child(spark)
-                    .child(div().w(px(70.)).flex_none().font_family(MONO).text_size(px(11.5)).child(pct(nodo_core::services::uptime(&hours, now, DAY))))
-                    .child(div().w(px(70.)).flex_none().font_family(MONO).text_size(px(11.5)).child(pct(nodo_core::services::uptime(&hours, now, 7 * DAY))))
-                    .child(div().w(px(70.)).flex_none().font_family(MONO).text_size(px(11.5)).child(pct(nodo_core::services::uptime(&hours, now, 30 * DAY))))
-                    .child(div().w(px(80.)).flex_none().text_size(px(11.5)).when(cert.is_some_and(|(_, warn)| warn), |d| d.text_color(t.danger)).child(cert.map(|(d, _)| i18n::t!("app.svc.days", n = d)).unwrap_or_default()))
+                    .child(div().w(px(70.)).flex_none().font_family(MONO).text_size(px(12.)).child(pct(nodo_core::services::uptime(&hours, now, DAY))))
+                    .child(div().w(px(70.)).flex_none().font_family(MONO).text_size(px(12.)).child(pct(nodo_core::services::uptime(&hours, now, 7 * DAY))))
+                    .child(div().w(px(70.)).flex_none().font_family(MONO).text_size(px(12.)).child(pct(nodo_core::services::uptime(&hours, now, 30 * DAY))))
+                    .child(div().w(px(80.)).flex_none().text_size(px(12.)).when(cert.is_some_and(|(_, warn)| warn), |d| d.text_color(t.danger)).child(cert.map(|(d, _)| i18n::t!("app.svc.days", n = d)).unwrap_or_default()))
                     .child(
                         div()
                             .w(px(112.))
@@ -433,7 +433,7 @@ impl NodoApp {
             );
         }
         if services.is_empty() {
-            list = list.child(div().p(px(24.)).flex().flex_col().gap(px(10.)).items_start().child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).child(i18n::t!("app.svc.empty_title"))).child(div().max_w(px(520.)).text_size(px(12.5)).line_height(px(18.)).text_color(t.ink_muted).child(i18n::t!("app.svc.empty_body"))).child(self.add_service_menu("svc-add-empty", None, cx)));
+            list = list.child(div().p(px(24.)).flex().flex_col().gap(px(10.)).items_start().child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).child(i18n::t!("app.svc.empty_title"))).child(div().max_w(px(520.)).text_size(px(13.)).line_height(px(18.)).text_color(t.ink_muted).child(i18n::t!("app.svc.empty_body"))).child(self.add_service_menu("svc-add-empty", None, cx)));
         }
         // incidents
         let mut inc = div().flex().flex_col().gap(px(3.)).p(px(12.)).border_t_1().border_color(t.border).bg(t.surface).max_h(px(220.)).child(div().flex().items_center().justify_between().child(ui::section_title(t, i18n::t!("app.svc.incidents"))).child(self.add_service_menu("svc-add", None, cx)));

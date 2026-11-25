@@ -338,7 +338,7 @@ impl NodoApp {
                 .border_color(t.border)
                 .bg(t.tag.opacity(0.12))
                 .child(ui::icon(IconName::TriangleAlert, 15., t.tag))
-                .child(div().flex_1().min_w_0().text_size(px(12.5)).line_height(px(18.)).child(text))
+                .child(div().flex_1().min_w_0().text_size(px(13.)).line_height(px(18.)).child(text))
         };
         let small = |id: &'static str, label: String| ui::outline_button(t, id).h(px(28.)).text_size(px(12.)).child(label);
         let mut col = div().flex().flex_col().flex_none();

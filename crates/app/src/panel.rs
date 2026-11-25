@@ -286,7 +286,7 @@ impl NodoApp {
         let counts = self.layer_counts();
         for l in Layer::ALL {
             if let Some(n) = counts.get(&l) {
-                s = s.child(div().flex().items_center().gap(px(6.)).text_size(px(12.5)).child(div().size(px(8.)).rounded_full().bg(t.layer(l))).child(layer_label(l)).child(div().text_color(t.ink_muted).child(n.to_string())));
+                s = s.child(div().flex().items_center().gap(px(6.)).text_size(px(13.)).child(div().size(px(8.)).rounded_full().bg(t.layer(l))).child(layer_label(l)).child(div().text_color(t.ink_muted).child(n.to_string())));
             }
         }
         if let Some(at) = self.disc.last_refresh {
@@ -305,7 +305,7 @@ impl NodoApp {
                 };
                 let color = if matches!(a.kind, AlertKind::Down { .. }) { t.danger } else { t.tag };
                 let hover = t.canvas;
-                s = s.child(div().id(("alert", k)).flex().flex_col().gap(px(1.)).p(px(6.)).rounded(px(6.)).cursor_pointer().hover(move |x| x.bg(hover)).child(div().flex().items_start().gap(px(6.)).text_size(px(12.5)).child(div().flex_none().pt(px(2.)).child(icon(IconName::Bell, 12., color))).child(div().flex_1().min_w_0().line_height(px(17.)).child(text))).child(div().text_size(px(11.)).text_color(t.ink_muted).child(crate::util::ago(a.at, now))).on_click(cx.listener(move |this, _, _, cx| {
+                s = s.child(div().id(("alert", k)).flex().flex_col().gap(px(1.)).p(px(6.)).rounded(px(6.)).cursor_pointer().hover(move |x| x.bg(hover)).child(div().flex().items_start().gap(px(6.)).text_size(px(13.)).child(div().flex_none().pt(px(2.)).child(icon(IconName::Bell, 12., color))).child(div().flex_1().min_w_0().line_height(px(17.)).child(text))).child(div().text_size(px(11.)).text_color(t.ink_muted).child(crate::util::ago(a.at, now))).on_click(cx.listener(move |this, _, _, cx| {
                     this.select_device(id, cx);
                     this.center_on(id);
                 })));
@@ -344,7 +344,7 @@ impl NodoApp {
         let mut s = div().flex().flex_col().gap(px(10.)).p(px(16.));
         let Some(doc) = &self.doc else { return s };
         let Some(n) = doc.data.network(id) else { return s };
-        let kv = |k: String, v: String| div().flex().flex_col().gap(px(2.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(k)).child(div().text_size(px(12.5)).line_height(px(17.)).child(v));
+        let kv = |k: String, v: String| div().flex().flex_col().gap(px(2.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(k)).child(div().text_size(px(13.)).line_height(px(17.)).child(v));
         let devices = doc.data.devices.iter().filter(|d| d.addrs.iter().any(|a| a.network == Some(id))).count();
         s = s.child(div().flex().items_center().gap(px(8.)).child(div().size(px(10.)).flex_none().rounded_full().bg(t.layer(n.layer))).child(div().flex_1().min_w_0().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(self.network_name(n)))).child(ui::chip(layer_label(n.layer), t.layer(n.layer), 11.));
         if let Some(c) = &n.cidr {
@@ -362,19 +362,19 @@ impl NodoApp {
                 s = s.child(kv(k.replace('_', " "), v.clone()));
             }
         }
-        s.child(ui::outline_button(t, "net-rename").w_full().h(px(30.)).text_size(px(12.5)).child(icon(IconName::Replace, 14., t.ink)).child(i18n::t!("app.net.rename")).on_click(cx.listener(move |this, _, window, cx| this.open_rename_network(id, window, cx))))
+        s.child(ui::outline_button(t, "net-rename").w_full().h(px(30.)).text_size(px(13.)).child(icon(IconName::Replace, 14., t.ink)).child(i18n::t!("app.net.rename")).on_click(cx.listener(move |this, _, window, cx| this.open_rename_network(id, window, cx))))
     }
 
     fn render_device(&self, t: &Tokens, d: &Device, cx: &mut Context<Self>) -> Div {
         let st = self.status(d);
         let id = d.id;
         let now = nodo_core::time::now();
-        let kv = |k: String, v: String| div().flex().flex_col().gap(px(2.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(k)).child(div().text_size(px(12.5)).line_height(px(17.)).child(v));
-        let mono = |v: String| div().font_family(MONO).text_size(px(11.5)).child(v);
+        let kv = |k: String, v: String| div().flex().flex_col().gap(px(2.)).child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(k)).child(div().text_size(px(13.)).line_height(px(17.)).child(v));
+        let mono = |v: String| div().font_family(MONO).text_size(px(12.)).child(v);
         let is_me = self.this_computer() == Some(id);
         let mut info = div().flex().flex_col().gap(px(10.)).p(px(16.)).border_b_1().border_color(t.border);
         if is_me {
-            info = info.child(div().flex().items_center().gap(px(5.)).text_size(px(11.5)).font_weight(FontWeight::SEMIBOLD).text_color(t.accent).child(ui::kind_svg("pin", 12., t.accent)).child(i18n::t!("app.fact.this_computer")));
+            info = info.child(div().flex().items_center().gap(px(5.)).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(t.accent).child(ui::kind_svg("pin", 12., t.accent)).child(i18n::t!("app.fact.this_computer")));
         }
         info = info.child(
             div()
@@ -491,10 +491,10 @@ impl NodoApp {
         }
         for (n, l) in d.links.iter().enumerate() {
             let url = l.url.clone();
-            info = info.child(div().id(("link", n)).text_size(px(12.5)).text_color(t.accent).cursor_pointer().hover(|s| s.underline()).child(if l.label.is_empty() { l.url.clone() } else { l.label.clone() }).on_click(move |_, _, cx| cx.open_url(&url)));
+            info = info.child(div().id(("link", n)).text_size(px(13.)).text_color(t.accent).cursor_pointer().hover(|s| s.underline()).child(if l.label.is_empty() { l.url.clone() } else { l.label.clone() }).on_click(move |_, _, cx| cx.open_url(&url)));
         }
         let seen = if d.last_seen > 0 { crate::util::ago(d.last_seen, now) } else { i18n::t!("app.device.never") };
-        info = info.child(div().text_size(px(11.5)).text_color(t.ink_muted).child(i18n::t!("app.device.seen", seen = seen, first = if d.first_seen > 0 { crate::util::local_time(d.first_seen) } else { String::new() })));
+        info = info.child(div().text_size(px(12.)).text_color(t.ink_muted).child(i18n::t!("app.device.seen", seen = seen, first = if d.first_seen > 0 { crate::util::local_time(d.first_seen) } else { String::new() })));
 
         // actions
         let has_ip = d.primary_ip().is_some();
@@ -551,16 +551,16 @@ impl NodoApp {
                 EventKind::AlertNew => t.tag,
                 _ => t.ink_muted,
             };
-            hist = hist.child(div().flex().gap(px(8.)).text_size(px(11.5)).child(div().flex_none().w(px(104.)).text_color(t.ink_muted).child(crate::util::local_time(e.at))).child(div().flex_1().min_w_0().text_color(c).child(event_label(e.kind, &e.detail))));
+            hist = hist.child(div().flex().gap(px(8.)).text_size(px(12.)).child(div().flex_none().w(px(104.)).text_color(t.ink_muted).child(crate::util::local_time(e.at))).child(div().flex_1().min_w_0().text_color(c).child(event_label(e.kind, &e.detail))));
         }
         div().flex().flex_col().child(info).child(actions).child(hist)
     }
 
     fn render_edit(&self, t: &Tokens, cx: &mut Context<Self>) -> Div {
         let Some(f) = &self.edit else { return div() };
-        let label = |s: String| div().text_size(px(11.5)).font_weight(FontWeight::MEDIUM).text_color(t.ink_muted).child(s);
+        let label = |s: String| div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(t.ink_muted).child(s);
         let field = |s: String, e: &Entity<InputState>| div().flex().flex_col().gap(px(3.)).child(label(s)).child(Input::new(e).small());
-        let area = |s: String, e: &Entity<TextareaState>| div().flex().flex_col().gap(px(3.)).child(label(s)).child(div().rounded(px(6.)).border_1().border_color(t.border).bg(t.canvas).px(px(6.)).py(px(4.)).text_size(px(12.5)).child(Textarea::new(e)));
+        let area = |s: String, e: &Entity<TextareaState>| div().flex().flex_col().gap(px(3.)).child(label(s)).child(div().rounded(px(6.)).border_1().border_color(t.border).bg(t.canvas).px(px(6.)).py(px(4.)).text_size(px(13.)).child(Textarea::new(e)));
         let weak = cx.entity().downgrade();
         let cur = f.kind;
         let kind = Button::new("edit-kind").outline().small().label(kind_label(cur)).dropdown_menu(move |mut menu, _, _| {
@@ -593,7 +593,7 @@ impl NodoApp {
             .child(area(i18n::t!("app.edit.links"), &f.links))
             .child(area(i18n::t!("app.edit.fields"), &f.fields))
             .child(area(i18n::t!("app.edit.notes"), &f.notes))
-            .child(div().text_size(px(11.5)).text_color(t.ink_muted).child(i18n::t!("app.edit.saves_hint")))
+            .child(div().text_size(px(12.)).text_color(t.ink_muted).child(i18n::t!("app.edit.saves_hint")))
             .child(
                 div()
                     .flex()

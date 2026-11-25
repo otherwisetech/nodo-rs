@@ -18,7 +18,7 @@ crates/core   nodo-core (lib `nodo_core`), no UI:
               paths.rs (config dir, recent maps incl. missing ones, default folder:
               `<Otherwise data root>/nodo`), mapfile.rs (safe copy / move via VACUUM INTO +
               verify; cloud-folder detection, conflict names and the `<map>.lock.json` lock are
-              otherwise-link's `cloud` / `lock`, so Otherwise Apps sees open maps), shell_env.rs, this_computer.rs (which device
+              otherwise-link's `cloud` / `lock`, so Otherwise Hub sees open maps), shell_env.rs, this_computer.rs (which device
               is the computer running Nodo: interfaces, host name, Tailscale node; runtime only; its VM
               bridges), vms.rs (VM / container runtimes running here, guest names), services.rs
               (HTTP(S) / TCP / DNS / ICMP checks, TLS expiry from DER, Tracker state machine,
@@ -79,7 +79,7 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
   is one notification.
   Services (`services::Engine`) start and stop with it, share its pause, and write only hourly
   buckets (at most every 10 minutes) and incidents to the map (migration 3).
-- **Otherwise Apps integration is opt-in or read-only.** The registry is touched only when
+- **Otherwise Hub integration is opt-in or read-only.** The registry is touched only when
   `hub.json` has `entities: true` (`Registry::open_shared`) and only with saved devices;
   `nodo mcp` writes only with `--allow-writes`; links into Vigía only open its form. Tests use
   `Root::at(tempdir)`, never the real shared folder. otherwise-link is a git tag; bumping it

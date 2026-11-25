@@ -366,7 +366,7 @@ impl NodoApp {
                         b = b.child(div().flex().items_center().gap(px(8.)).child(label(i18n::t!("app.aws.profile"))).child(pick));
                     }
                 }
-                b = b.child(label(i18n::t!("app.aws.regions"))).child(Input::new(&f.regions)).child(div().text_size(px(11.5)).text_color(t.ink_muted).child(i18n::t!("app.aws.regions_hint"))).child(div().text_size(px(11.5)).text_color(t.ink_muted).child(i18n::t!("app.aws.privacy")));
+                b = b.child(label(i18n::t!("app.aws.regions"))).child(Input::new(&f.regions)).child(div().text_size(px(12.)).text_color(t.ink_muted).child(i18n::t!("app.aws.regions_hint"))).child(div().text_size(px(12.)).text_color(t.ink_muted).child(i18n::t!("app.aws.privacy")));
                 let ready = f.profile.is_some() && !self.disc.aws;
                 (i18n::t!("app.aws.title"), b.into_any_element(), i18n::t!("app.aws.ok"), false, ready, |this, _, cx| this.submit_aws(cx))
             }
@@ -378,7 +378,7 @@ impl NodoApp {
                 })
             }
             Dialog::Settings(f) => {
-                let hint = |s: String| div().text_size(px(11.5)).text_color(t.ink_muted).child(s);
+                let hint = |s: String| div().text_size(px(12.)).text_color(t.ink_muted).child(s);
                 let check = |id: &'static str, l: String, on: bool, set: fn(&mut SettingsForm, bool)| {
                     Checkbox::new(id).small().label(l).checked(on).on_click(cx.listener(move |this, v: &bool, _, cx| {
                         if let Some(Dialog::Settings(f)) = this.dialog.as_mut() {
@@ -521,7 +521,7 @@ impl NodoApp {
                             .hover(move |s| s.bg(hover))
                             .child(crate::ui::kind_svg(d.kind.id(), 15., t.ink_muted))
                             .child(div().flex_1().min_w_0().truncate().text_size(px(13.)).child(d.name.clone()))
-                            .child(div().text_size(px(11.5)).text_color(t.ink_muted).child(d.primary_ip().map(|i| i.to_string()).unwrap_or_default()))
+                            .child(div().text_size(px(12.)).text_color(t.ink_muted).child(d.primary_ip().map(|i| i.to_string()).unwrap_or_default()))
                             .on_click(cx.listener(move |this, _, _, cx| this.merge_into(id, other, cx))),
                     );
                 }
@@ -574,7 +574,7 @@ impl NodoApp {
                             _ => i18n::t!("app.share.offer_file", from = from.clone(), name = nodo_core::share::safe_name(&offer.name), size = crate::share_ui::size_label(offer.size)),
                         };
                         let dir = crate::settings::Settings::load().share_dir().display().to_string();
-                        (i18n::t!("app.share.offer_title"), div().flex().flex_col().gap(px(8.)).child(text(what)).when(offer.kind != nodo_core::share::transfer::Kind::Text, |d| d.child(div().text_size(px(11.5)).text_color(t.ink_muted).child(i18n::t!("app.share.offer_dir", dir = dir)))).into_any_element(), i18n::t!("app.share.accept"), false, true, |this, _, cx| this.answer_ask(true, cx))
+                        (i18n::t!("app.share.offer_title"), div().flex().flex_col().gap(px(8.)).child(text(what)).when(offer.kind != nodo_core::share::transfer::Kind::Text, |d| d.child(div().text_size(px(12.)).text_color(t.ink_muted).child(i18n::t!("app.share.offer_dir", dir = dir)))).into_any_element(), i18n::t!("app.share.accept"), false, true, |this, _, cx| this.answer_ask(true, cx))
                     }
                 }
             }

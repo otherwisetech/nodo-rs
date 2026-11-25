@@ -1,7 +1,7 @@
 //! What the AI panel's assistant may change, as proposals. `nodo mcp --propose <folder>` turns
 //! its write tools (`update_device`, `add_service`) into a checked [`Proposal`] dropped in that
 //! folder; the app shows it as a card and applies it, built the same way, only when the user
-//! accepts. `--allow-writes` (Otherwise Apps' hub) uses the same builders and saves at once.
+//! accepts. `--allow-writes` (Otherwise Hub's hub) uses the same builders and saves at once.
 use crate::db::MapData;
 use crate::model::Device;
 use crate::services::{CheckKind, ServiceCheck, Spec};

@@ -14,9 +14,10 @@ app.menu.export = Export
 app.menu.close = Close map
 app.credit.menu = {company} website
 app.about.menu = About {app}
-app.about.footer = {app} {version} · {company} · About
+app.about.footer_link = About
+app.privacy.local = Your data stays on this computer
 app.about.description = Map and track the devices on your networks — LAN, Tailscale, AWS and WireGuard — as a living graph. Everything stays on your computer.
-app.about.by = Developed by {company}
+app.about.by = Made by {company}
 app.about.place = Wyoming, USA
 app.about.visit = Visit otherwisetech.com
 app.about.source = Source code
@@ -480,11 +481,11 @@ app.svc.add_for = Monitor a service…
 app.svc.add_title = New service
 app.svc.edit_title = Edit service
 
-# Otherwise Apps: Today view, shared registry, deep links, Vigía
-app.settings.otherwise = Otherwise Apps
-app.settings.today = Show devices and services that need attention in the Today view of Otherwise Apps
-app.settings.registry_on = Saved devices and their places are shared with the other Otherwise apps (turned on in Otherwise Apps).
-app.settings.registry_off = Sharing devices with the other Otherwise apps is off; it can be turned on in Otherwise Apps.
+# Otherwise Hub: Today view, shared registry, deep links, Vigía
+app.settings.otherwise = Otherwise Hub
+app.settings.today = Show devices and services that need attention in the Today view of Otherwise Hub
+app.settings.registry_on = Saved devices and their places are shared with the other Otherwise apps (turned on in Otherwise Hub).
+app.settings.registry_off = Sharing devices with the other Otherwise apps is off; it can be turned on in Otherwise Hub.
 app.link.not_found = That isn't in this map.
 app.link.unknown = Nodo can't open this link: {url}
 app.link.owner_company = company

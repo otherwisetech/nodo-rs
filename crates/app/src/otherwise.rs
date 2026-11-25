@@ -193,7 +193,7 @@ impl NodoApp {
     }
 
     /// Publishes the map's saved devices and sites to the shared registry in the background
-    /// (nothing happens unless the user turned it on in Otherwise Apps), and learns which
+    /// (nothing happens unless the user turned it on in Otherwise Hub), and learns which
     /// owners are people or companies there.
     pub fn sync_registry(&mut self, cx: &mut Context<Self>) {
         if self.link.syncing {

@@ -32,10 +32,10 @@ impl Format {
 pub fn svg_to_png(svg: &str) -> Result<Vec<u8>, String> {
     use resvg::{tiny_skia, usvg};
     let mut opt = usvg::Options::default();
-    for f in crate::FONTS {
+    for f in otherwise_ui::fonts::INTER {
         opt.fontdb_mut().load_font_data(f.to_vec());
     }
-    opt.font_family = "Inter".into(); // i18n-ok: font name
+    opt.font_family = otherwise_ui::tokens::SANS.into();
     let tree = usvg::Tree::from_str(svg, &opt).map_err(|e| e.to_string())?;
     let size = tree.size();
     let scale = (8000. / size.width().max(size.height())).min(2.);
