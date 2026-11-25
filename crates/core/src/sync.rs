@@ -1,12 +1,12 @@
 //! Nodo's side of the shared entity registry of the Otherwise apps (`otherwise_link::registry`),
-//! only when the user turned it on in Otherwise Apps.
+//! only when the user turned it on in Otherwise Hub.
 //!
 //! - **Push**: every saved device of the map becomes a `device` card (MACs, host names, IPs,
 //!   Tailscale node, vendor, model, OS), and every place named in a saved device's *Location*
 //!   a `site` card. Refs are `device-<id>@<map uid>` / `site-<name>@<map uid>`, so two maps never
 //!   claim each other's cards; a device another map already holds (same MAC) is updated without
 //!   taking its ref. A card is pushed again only when what Nodo would send changed.
-//! - **Pull**: only to keep the links right (merges repoint, a card deleted in Otherwise Apps
+//! - **Pull**: only to keep the links right (merges repoint, a card deleted in Otherwise Hub
 //!   detaches the device for good); Nodo's own data stays Nodo's.
 //! - **Owners**: a device's *Owner* text is matched against the registry's people and companies
 //!   ([`owner_card`]) so the app can label it and the card can point at it.

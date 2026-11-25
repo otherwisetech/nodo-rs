@@ -40,7 +40,7 @@ pub struct Settings {
     pub share_dir: Option<String>,
     /// Largest file accepted, in MB.
     pub share_max_mb: Option<String>,
-    /// `"off"`: don't publish alerts to Otherwise Apps' Today view.
+    /// `"off"`: don't publish alerts to Otherwise Hub's Today view.
     pub today_feed: Option<String>,
     /// The executable `otherwise-nodo://` was last registered for (Windows / Linux).
     pub link_registered: Option<String>,

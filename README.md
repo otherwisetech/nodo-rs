@@ -121,7 +121,7 @@ for scripts and AI agents.
   checked (`integrity_check`) and reopened before anything else happens, and *Move* deletes the
   original only after that and after you confirm. New maps are offered in the folder you used
   last (never a temporary folder), else in Nodo's folder of the Otherwise data folder
-  (`~/.otherwise/nodo`, or wherever you moved it in Otherwise Apps → Settings). Recent maps that were moved or deleted stay in the list,
+  (`~/.otherwise/nodo`, or wherever you moved it in Otherwise Hub → Settings). Recent maps that were moved or deleted stay in the list,
   greyed, with *Locate…*; right-click one to remove it, show it or move it.
 - **Cloud-synced folders** (OneDrive, iCloud Drive, Dropbox, Google Drive, Box, anything under
   `~/Library/CloudStorage`) are recognised: the map stays one file in short transactions, a small
@@ -182,12 +182,12 @@ nodo map move "/tmp/Home network.nodo" ~/Library/CloudStorage/OneDrive-Personal/
                                       # copy, check, then delete the original (refuses while open elsewhere)
 ```
 
-## Otherwise Apps
+## Otherwise Hub
 
 Nodo plugs into [otherwise-link](https://github.com/otherwisetech/otherwise-link), the shared
 layer of the Otherwise Technologies apps. Everything stays on the computer.
 
-- **Deep links.** `otherwise-nodo://` (and `otherwise://nodo/…` through Otherwise Apps) is
+- **Deep links.** `otherwise-nodo://` (and `otherwise://nodo/…` through Otherwise Hub) is
   registered by the bundle's `Info.plist`, the Linux entry
   (`packaging/linux/io.github.otherwisetech.nodo-app.desktop`, `Exec=… %u`) and
   `HKCU\Software\Classes` on Windows.
@@ -202,20 +202,20 @@ layer of the Otherwise Technologies apps. Everything stays on the computer.
   A map's uid is stored in the map file, so links survive moving it.
 - **Today.** While a map is open and watched, devices down, services down or slow and
   certificates expiring within 30 days (or the service's own warning) go to
-  `today/nodo.json` for Otherwise Apps' Today view. Alerts expire a couple of hours after
+  `today/nodo.json` for Otherwise Hub's Today view. Alerts expire a couple of hours after
   Nodo last wrote them, so nothing stale stays behind when Nodo quits. Settings → *Show … in
   the Today view* turns it off.
 - **Vigía.** A certificate event (and the calendar button of an HTTPS service in the Status
   view) opens Vigía's new-item form prefilled: type certificate, the host, the expiry, under
   the domain as a digital asset. A device's *More* menu has *Add warranty in Vigía*. Nothing is
   saved in Vigía until you do.
-- **Shared entities** (only when turned on in Otherwise Apps). Saved devices are published as
+- **Shared entities** (only when turned on in Otherwise Hub). Saved devices are published as
   `device` cards (MACs, host names, IPs, Tailscale node, vendor, model, OS) and the places in
   their *Location* as `site` cards; a device's *Owner* is shown as a company or person when the
   registry has one by that name. Pushed again only when something changed; devices taken out
-  of the inventory are unlinked; merges and deletes made in Otherwise Apps are followed.
+  of the inventory are unlinked; merges and deletes made in Otherwise Hub are followed.
 - **MCP.** `nodo mcp` is a stdio MCP server, read-only: `status`, `services`, `incidents`,
-  `history`, `network_map`, `devices`, `device`. With `--allow-writes` (which Otherwise Apps' hub
+  `history`, `network_map`, `devices`, `device`. With `--allow-writes` (which Otherwise Hub's hub
   passes only when you allow write tools) it adds `update_device` and `add_service`, each
   recorded in the device's history; with `--propose <folder>` (the app's assistant) those two
   only leave a proposal for the app.

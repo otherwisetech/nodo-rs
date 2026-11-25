@@ -6,7 +6,7 @@ use gpui::*;
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem};
-use gpui_component::{IconName, Sizable as _, Theme};
+use gpui_component::{IconName, Sizable as _};
 use nodo_core::doc::Doc;
 use nodo_core::graph::{Graph, GraphOpts};
 use nodo_core::layout::{Mode, Placed};
@@ -113,8 +113,7 @@ pub fn bind_keys(cx: &mut App) {
 }
 
 pub(crate) fn sync_theme(window: Option<&mut Window>, cx: &mut App) {
-    Theme::sync_system_appearance(window, cx);
-    Theme::global_mut(cx).font_family = SANS.into();
+    crate::theme::apply(window, cx);
 }
 
 pub enum Phase {
@@ -652,14 +651,11 @@ impl NodoApp {
 
     fn render_topbar(&self, t: &Tokens, cx: &mut Context<Self>) -> impl IntoElement {
         let ready = matches!(self.phase, Phase::Ready);
-        let mut left = div().flex().items_center().gap(px(10.)).min_w_0().flex_shrink_1();
-        left = left.child(div().flex().flex_none().items_center().justify_center().size(px(30.)).rounded(px(8.)).bg(t.brand).child(ui::logo_mark(17., gpui::white())));
         let title = self.doc.as_ref().map(|d| d.title()).unwrap_or_else(|| crate::APP_NAME.to_string());
-        left = left.child(div().min_w(px(40.)).flex_shrink_1().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).truncate().child(title));
         let current = i18n::locale();
         let weak = cx.entity().downgrade();
         let stars_on = crate::star::enabled(cx);
-        let lang = Button::new("lang").ghost().icon(IconName::Globe).with_size(px(34.)).tooltip(i18n::t!("common.language")).dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
+        let lang = Button::new("lang").ghost().icon(IconName::Globe).with_size(px(otherwise_ui::tokens::size::CONTROL)).tooltip(i18n::t!("common.language")).dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
             menu = menu.label(i18n::t!("common.language"));
             for (code, name) in i18n::available() {
                 let w = weak.clone();
@@ -681,41 +677,21 @@ impl NodoApp {
                 w.update(cx, |this, cx| this.show_about(cx)).ok();
             }))
         });
-        let search = div()
-            .flex()
-            .items_center()
-            .gap(px(6.))
+        let search = otherwise_ui::search_frame(t)
             .w(px(420.))
             .min_w(px(160.))
             .flex_shrink(1.)
-            .h(px(34.))
-            .pl(px(10.))
-            .pr(px(4.))
-            .rounded(px(10.))
-            .border_1()
-            .border_color(t.border)
-            .bg(t.canvas)
-            .child(icon(IconName::Search, 14., t.ink_muted))
             .child(div().flex_1().min_w_0().text_size(px(13.)).child(Input::new(&self.search).appearance(false).small()))
             .children(self.match_count(cx).map(|(n, total)| div().flex_none().pr(px(6.)).text_size(px(11.)).text_color(if n == 0 { t.danger } else { t.ink_muted }).child(i18n::t!("app.search.count", n = n, total = total))));
-        div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .gap(px(8.))
-            .h(px(52.))
-            .px(px(12.))
-            .border_b_1()
-            .border_color(t.border)
-            .bg(t.surface)
-            .child(left)
-            .child(div().flex_1())
-            .when(ready, |d| d.child(search).child(self.render_discover_buttons(t, cx)))
-            .when(!ready, |d| {
-                d.child(ui::outline_button(t, "top-open").child(icon(IconName::FolderOpen, 15., t.ink)).child(i18n::t!("app.file.open")).on_click(cx.listener(|this, _, window, cx| this.open_dialog(window, cx))))
-            })
-            .child(ui::icon_button(t, "top-assistant", IconName::Bot, true).tooltip(|w, cx| gpui_component::tooltip::Tooltip::new(i18n::t!("app.assistant.toggle")).build(w, cx)).on_click(cx.listener(|this, _, window, cx| this.toggle_agent_panel(window, cx))))
-            .child(lang)
+        let mut header = otherwise_ui::AppHeader::new(otherwise_ui::logo_mark(crate::LOGO_SVG), title);
+        header = if ready {
+            header.action(search).action(self.render_discover_buttons(t, cx))
+        } else {
+            header.action(ui::outline_button(t, "top-open").child(icon(IconName::FolderOpen, 15., t.ink)).child(i18n::t!("app.file.open")).on_click(cx.listener(|this, _, window, cx| this.open_dialog(window, cx))))
+        };
+        header
+            .action(ui::icon_button(t, "top-assistant", IconName::Bot, true).tooltip(|w, cx| gpui_component::tooltip::Tooltip::new(i18n::t!("app.assistant.toggle")).build(w, cx)).on_click(cx.listener(|this, _, window, cx| this.toggle_agent_panel(window, cx))))
+            .action(lang)
     }
 
     fn match_count(&self, cx: &App) -> Option<(usize, usize)> {
@@ -824,7 +800,7 @@ impl NodoApp {
                     .child(feature("server", i18n::t!("app.welcome.f_monitor"), i18n::t!("app.welcome.f_monitor_body"))),
             )
             .when(!recent.is_empty(), |d| d.child(div().flex().flex_col().w_full().max_w(px(560.)).gap(px(2.)).child(div().px(px(12.)).pb(px(4.)).child(ui::section_title(t, i18n::t!("app.welcome.recent")))).children(recent)))
-            .child(div().w_full().max_w(px(560.)).text_center().text_size(px(11.5)).line_height(px(16.)).text_color(muted).child(i18n::t!("app.welcome.privacy")))
+            .child(div().w_full().max_w(px(560.)).text_center().text_size(px(12.)).line_height(px(16.)).text_color(muted).child(i18n::t!("app.welcome.privacy")))
             .child(div().flex().flex_wrap().justify_center().items_center().gap(px(12.)).text_size(px(12.)).child(icon(IconName::Globe, 13., muted)).children(langs))
     }
 
@@ -863,20 +839,8 @@ impl NodoApp {
             None => String::new(),
         };
         let ink = t.ink;
-        div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .gap(px(12.))
-            .h(px(26.))
-            .px(px(12.))
-            .border_t_1()
-            .border_color(t.border)
-            .bg(t.surface)
-            .text_size(px(11.))
-            .text_color(t.ink_muted)
-            .child(div().flex_1().min_w_0().truncate().child(left))
-            .children(self.this_computer_summary().map(|s| {
+        let mut items: Vec<AnyElement> = Vec::new();
+        items.extend(self.this_computer_summary().map(|s| {
                 let me = self.this_computer();
                 div()
                     .id("footer-me")
@@ -897,86 +861,37 @@ impl NodoApp {
                         }
                         None => this.toast(i18n::t!("app.me.not_found"), cx),
                     }))
-            }))
-            .children(self.render_cloud_footer())
-            .children(self.render_share_footer(t, cx))
-            .children(self.render_term_footer(t, cx))
-            .children(self.monitor_status(t))
-            .child(crate::star::footer_link(t, cx))
-            .child(
-                div()
-                    .id("footer-about")
-                    .flex_none()
-                    .cursor_pointer()
-                    .hover(move |s| s.text_color(ink).underline())
-                    .child(i18n::t!("app.about.footer", app = crate::APP_NAME, version = crate::VERSION, company = crate::COMPANY))
-                    .on_click(cx.listener(|this, _, _, cx| this.show_about(cx))),
-            )
+                    .into_any_element()
+        }));
+        items.extend(self.render_cloud_footer().map(IntoElement::into_any_element));
+        items.extend(self.render_share_footer(t, cx).map(IntoElement::into_any_element));
+        items.extend(self.render_term_footer(t, cx).map(IntoElement::into_any_element));
+        items.extend(self.monitor_status(t).map(IntoElement::into_any_element));
+        items.push(crate::star::footer_link(t, cx).into_any_element());
+        let status = if left.is_empty() { otherwise_ui::privacy_note(t, i18n::t!("app.privacy.local"), None).into_any_element() } else { div().truncate().child(left).into_any_element() };
+        items.into_iter().fold(otherwise_ui::AppFooter::new(crate::APP_NAME, i18n::t!("app.about.footer_link")).version(crate::VERSION).status(status), |f, el| f.item(el)).on_about(cx.listener(|this, _, _, cx| this.show_about(cx)))
     }
 
     fn render_about(&self, t: &Tokens, cx: &mut Context<Self>) -> impl IntoElement {
-        let accent = t.accent;
-        let card = div()
-            .id("about-card")
-            .relative()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(12.))
-            .w(px(420.))
-            .px(px(32.))
-            .pt(px(32.))
-            .pb(px(26.))
-            .rounded(px(18.))
-            .border_1()
-            .border_color(t.border)
-            .bg(t.surface)
-            .shadow_lg()
-            // clicks inside the card must not reach the backdrop
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(div().absolute().top(px(10.)).right(px(10.)).child(ui::icon_button(t, "about-close", IconName::Close, true).on_click(cx.listener(|this, _, _, cx| {
+        let star = div().flex().flex_col().items_center().gap(px(otherwise_ui::tokens::space::S3)).child(crate::star::about_button(t, cx)).child(crate::star::about_ask(t));
+        otherwise_ui::AboutModal::new(crate::APP_NAME, crate::VERSION, i18n::t!("app.about.by", company = crate::COMPANY))
+            .logo(self.logo.clone())
+            .description(i18n::t!("app.about.description"))
+            .place(i18n::t!("app.about.place"))
+            .website(i18n::t!("app.about.visit"), crate::COMPANY_URL)
+            .vcity(i18n::t!("app.vcity.invite"), i18n::t!("app.vcity.menu"), crate::VCITY_URL)
+            .source(i18n::t!("app.about.source"), crate::REPO_URL)
+            .extra(star)
+            .license(i18n::t!("app.about.license"))
+            .on_dismiss(cx.listener(|this, _: &otherwise_ui::Dismiss, _, cx| {
                 this.about = false;
                 cx.notify();
-            }))))
-            .child(img(self.logo.clone()).size(px(88.)))
-            .child(div().flex().items_baseline().gap(px(8.)).child(div().text_size(px(22.)).font_weight(FontWeight::SEMIBOLD).child(crate::APP_NAME)).child(div().text_size(px(13.)).text_color(t.ink_muted).child(crate::VERSION)))
-            .child(div().text_center().text_size(px(13.)).line_height(px(19.)).text_color(t.ink_muted).child(i18n::t!("app.about.description")))
-            .child(div().w_full().h(px(1.)).my(px(4.)).bg(t.border))
-            .child(div().flex().flex_col().items_center().gap(px(2.)).child(div().text_size(px(13.)).child(i18n::t!("app.about.by", company = crate::COMPANY))).child(div().text_size(px(12.)).text_color(t.ink_muted).child(i18n::t!("app.about.place"))))
-            .child(ui::filled_button(t, "about-site", t.accent).mt(px(4.)).child(i18n::t!("app.about.visit")).on_click(|_, _, cx| cx.open_url(crate::COMPANY_URL)))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(div().text_center().text_size(px(12.)).line_height(px(17.)).text_color(t.ink_muted).child(i18n::t!("app.vcity.invite")))
-                    .child(div().id("about-vcity").text_size(px(12.)).text_color(accent).cursor_pointer().hover(|s| s.underline()).child(i18n::t!("app.vcity.menu")).on_click(|_, _, cx| cx.open_url(crate::VCITY_URL))),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(14.))
-                    .child(div().id("about-source").text_size(px(12.)).text_color(accent).cursor_pointer().hover(|s| s.underline()).child(i18n::t!("app.about.source")).on_click(|_, _, cx| cx.open_url(crate::REPO_URL)))
-                    .child(crate::star::about_button(t, cx)),
-            )
-            .child(crate::star::about_ask(t))
-            .child(div().text_size(px(11.)).text_color(t.ink_muted).child(i18n::t!("app.about.license")));
-        ui::backdrop(t, "about-backdrop")
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
-                    this.about = false;
-                    cx.notify();
-                }),
-            )
-            .child(card)
+            }))
     }
 
     fn render_toast(&self, t: &Tokens) -> Option<impl IntoElement> {
         let (text, _) = self.toast.as_ref()?;
-        Some(div().absolute().bottom(px(36.)).left_0().right_0().flex().justify_center().child(div().max_w(px(640.)).px(px(16.)).py(px(10.)).rounded(px(12.)).bg(t.ink).text_color(t.on_fill()).text_size(px(13.)).child(text.clone())))
+        Some(div().absolute().bottom(px(40.)).left_0().right_0().flex().justify_center().child(otherwise_ui::toast(t, text.clone()).max_w(px(640.))))
     }
 }
 

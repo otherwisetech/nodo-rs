@@ -14,9 +14,10 @@ app.menu.export = Exportar
 app.menu.close = Fechar mapa
 app.credit.menu = Site da {company}
 app.about.menu = Sobre o {app}
-app.about.footer = {app} {version} · {company} · Sobre
+app.about.footer_link = Sobre
+app.privacy.local = Seus dados ficam neste computador
 app.about.description = Mapeie e acompanhe os dispositivos das suas redes — LAN, Tailscale, AWS e WireGuard — como um grafo vivo. Tudo fica no seu computador.
-app.about.by = Desenvolvido por {company}
+app.about.by = Feito por {company}
 app.about.place = Wyoming, EUA
 app.about.visit = Visitar otherwisetech.com
 app.about.source = Código-fonte
@@ -480,11 +481,11 @@ app.svc.add_for = Monitorar um serviço…
 app.svc.add_title = Novo serviço
 app.svc.edit_title = Editar serviço
 
-# Otherwise Apps: Today view, shared registry, deep links, Vigía
-app.settings.otherwise = Otherwise Apps
-app.settings.today = Mostrar dispositivos e serviços que precisam de atenção na visão Hoje do Otherwise Apps
-app.settings.registry_on = Os dispositivos salvos e seus locais são compartilhados com os outros apps da Otherwise (ativado no Otherwise Apps).
-app.settings.registry_off = O compartilhamento de dispositivos com os outros apps da Otherwise está desativado; ative-o no Otherwise Apps.
+# Otherwise Hub: Today view, shared registry, deep links, Vigía
+app.settings.otherwise = Otherwise Hub
+app.settings.today = Mostrar dispositivos e serviços que precisam de atenção na visão Hoje do Otherwise Hub
+app.settings.registry_on = Os dispositivos salvos e seus locais são compartilhados com os outros apps da Otherwise (ativado no Otherwise Hub).
+app.settings.registry_off = O compartilhamento de dispositivos com os outros apps da Otherwise está desativado; ative-o no Otherwise Hub.
 app.link.not_found = Isso não está neste mapa.
 app.link.unknown = O Nodo não consegue abrir este link: {url}
 app.link.owner_company = empresa

@@ -1,74 +1,14 @@
 //! Small styled building blocks shared by the top bar, panel and screens.
 use crate::theme::Tokens;
-use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{Icon, IconName};
+use gpui_component::IconName;
+use otherwise_ui::tokens::{icon as icon_size, text};
+pub use otherwise_ui::{filled_button, icon, outline_button, section_title};
 
-pub fn icon(name: IconName, size: f32, color: Hsla) -> Icon {
-    Icon::new(name).size(px(size)).text_color(color)
-}
-
-/// Outlined 34 px control.
-pub fn outline_button(t: &Tokens, id: impl Into<ElementId>) -> Stateful<Div> {
-    let hover = t.border_strong;
-    div()
-        .id(id)
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(px(6.))
-        .h(px(34.))
-        .px(px(12.))
-        .rounded(px(10.))
-        .border_1()
-        .border_color(t.border)
-        .bg(t.surface)
-        .text_color(t.ink)
-        .text_size(px(13.))
-        .font_weight(FontWeight::MEDIUM)
-        .cursor_pointer()
-        .hover(move |s| s.border_color(hover))
-}
-
-/// Filled 34 px control.
-pub fn filled_button(t: &Tokens, id: impl Into<ElementId>, bg: Hsla) -> Stateful<Div> {
-    let hover = bg.opacity(0.88);
-    div()
-        .id(id)
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(px(6.))
-        .h(px(34.))
-        .px(px(14.))
-        .rounded(px(10.))
-        .bg(bg)
-        .text_color(t.on_fill())
-        .text_size(px(13.))
-        .font_weight(FontWeight::MEDIUM)
-        .cursor_pointer()
-        .hover(move |s| s.bg(hover))
-}
-
-/// Square icon-only 34 px control.
+/// The family's square icon-only button with one of gpui-component's icons.
 pub fn icon_button(t: &Tokens, id: impl Into<ElementId>, name: IconName, enabled: bool) -> Stateful<Div> {
-    let hover = t.canvas;
-    div()
-        .id(id)
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .size(px(34.))
-        .rounded(px(10.))
-        .child(icon(name, 16., if enabled { t.ink } else { t.ink_muted.opacity(0.5) }))
-        .when(enabled, |d| d.cursor_pointer().hover(move |s| s.bg(hover)))
+    otherwise_ui::icon_button(t, id, enabled).child(icon(name, icon_size::TOOLBAR, if enabled { t.ink } else { t.ink_faint }))
 }
-
-pub fn section_title(t: &Tokens, text: impl Into<SharedString>) -> Div {
-    div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(t.ink_muted).child(text.into())
-}
-
 
 /// The app's own mark.
 pub fn logo_mark(size: f32, color: Hsla) -> Svg {
@@ -87,18 +27,18 @@ pub fn chip(text: impl Into<SharedString>, color: Hsla, size: f32) -> Div {
 
 /// Segmented control of two or more options.
 pub fn seg(t: &Tokens, id: impl Into<ElementId>, label: String, on: bool) -> Stateful<Div> {
-    div().id(id).flex().items_center().gap(px(5.)).h(px(26.)).px(px(10.)).rounded(px(7.)).text_size(px(12.)).cursor_pointer().when(on, |d| d.bg(t.surface).font_weight(FontWeight::SEMIBOLD).shadow_sm()).when(!on, |d| d.text_color(t.ink_muted)).child(label)
+    otherwise_ui::segment(t, id, on).child(label)
 }
 
 pub fn seg_group(t: &Tokens) -> Div {
-    div().flex().flex_none().items_center().gap(px(2.)).p(px(2.)).rounded(px(9.)).bg(t.border.opacity(0.6))
+    otherwise_ui::segmented(t)
 }
 
 pub fn code_block(t: &Tokens, id: impl Into<ElementId>, text: String) -> Stateful<Div> {
-    div().id(id).max_h(px(160.)).overflow_y_scroll().p(px(8.)).rounded(px(6.)).bg(t.canvas).font_family(crate::theme::MONO).text_size(px(11.5)).line_height(px(16.)).child(text)
+    div().id(id).max_h(px(160.)).overflow_y_scroll().p(px(8.)).rounded(px(6.)).bg(t.canvas).font_family(crate::theme::MONO).text_size(px(text::CAPTION)).line_height(px(16.)).child(text)
 }
 
 pub fn backdrop(t: &Tokens, id: &'static str) -> Stateful<Div> {
-    div().id(id).absolute().inset_0().flex().items_center().justify_center().bg(gpui::black().opacity(if t.dark { 0.55 } else { 0.32 }))
+    div().id(id).absolute().inset_0().flex().items_center().justify_center().bg(t.backdrop)
 }
 

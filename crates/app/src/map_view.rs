@@ -191,7 +191,7 @@ impl NodoApp {
             .items_center()
             .gap(px(2.))
             .child(small("zoom-out", IconName::Minus, i18n::t!("app.map.zoom_out")).on_click(cx.listener(|this, _, _, cx| this.zoom_key(Some(1. / 1.2), cx))))
-            .child(div().id("zoom-fit").w(px(44.)).text_center().text_size(px(11.5)).text_color(t.ink_muted).cursor_pointer().child(format!("{:.0}%", self.view.zoom * 100.)).tooltip(|w, cx| Tooltip::new(i18n::t!("app.map.zoom_reset")).build(w, cx)).on_click(cx.listener(|this, _, _, cx| this.zoom_key(None, cx))))
+            .child(div().id("zoom-fit").w(px(44.)).text_center().text_size(px(12.)).text_color(t.ink_muted).cursor_pointer().child(format!("{:.0}%", self.view.zoom * 100.)).tooltip(|w, cx| Tooltip::new(i18n::t!("app.map.zoom_reset")).build(w, cx)).on_click(cx.listener(|this, _, _, cx| this.zoom_key(None, cx))))
             .child(small("zoom-in", IconName::Plus, i18n::t!("app.map.zoom_in")).on_click(cx.listener(|this, _, _, cx| this.zoom_key(Some(1.2), cx))));
         let paused = self.mon.paused;
         let monitor = ui::outline_button(t, "monitor-toggle")
@@ -651,7 +651,7 @@ impl NodoApp {
             if group && (k == 0 || !rows[k - 1].owner.trim().eq_ignore_ascii_case(owner)) {
                 let n = rows.iter().filter(|x| x.owner.trim().eq_ignore_ascii_case(owner)).count();
                 let title = if owner.is_empty() { i18n::t!("app.list.no_owner") } else { owner.to_string() };
-                list = list.child(div().flex().flex_none().items_center().gap(px(8.)).h(px(28.)).px(px(12.)).bg(t.canvas).border_b_1().border_color(t.border).text_size(px(11.5)).font_weight(FontWeight::SEMIBOLD).child(icon(IconName::User, 12., t.ink_muted)).child(title).child(div().text_color(t.ink_muted).font_weight(FontWeight::NORMAL).child(i18n::tn!("app.devices.count", n))));
+                list = list.child(div().flex().flex_none().items_center().gap(px(8.)).h(px(28.)).px(px(12.)).bg(t.canvas).border_b_1().border_color(t.border).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).child(icon(IconName::User, 12., t.ink_muted)).child(title).child(div().text_color(t.ink_muted).font_weight(FontWeight::NORMAL).child(i18n::tn!("app.devices.count", n))));
             }
             let s = st(d);
             let selected = self.selected == Some(Sel::Device(d.id));
@@ -668,19 +668,19 @@ impl NodoApp {
                     .px(px(12.))
                     .border_b_1()
                     .border_color(t.border.opacity(0.5))
-                    .text_size(px(12.5))
+                    .text_size(px(13.))
                     .cursor_pointer()
                     .when(selected, |r| r.bg(t.accent_soft))
                     .when(!selected, |r| r.hover(move |x| x.bg(hover)))
                     .when(!s.online(), |r| r.text_color(t.ink_muted))
-                    .child(div().w(px(90.)).flex_none().flex().items_center().gap(px(6.)).child(div().size(px(8.)).rounded_full().bg(status_color(t, s))).child(div().text_size(px(11.5)).truncate().child(status_label(s))))
+                    .child(div().w(px(90.)).flex_none().flex().items_center().gap(px(6.)).child(div().size(px(8.)).rounded_full().bg(status_color(t, s))).child(div().text_size(px(12.)).truncate().child(status_label(s))))
                     .child(div().flex().flex_1().min_w_0().items_center().gap(px(6.)).child(ui::kind_svg(d.kind.id(), 15., if Some(id) == me { t.accent } else { t.ink_muted })).child(div().truncate().when(Some(id) == me, |n| n.font_weight(FontWeight::SEMIBOLD)).child(d.name.clone())).when(Some(id) == me, |r| r.child(div().flex().flex_none().items_center().gap(px(3.)).px(px(6.)).rounded(px(5.)).bg(t.accent.opacity(0.14)).text_color(t.accent).text_size(px(10.5)).child(ui::kind_svg("pin", 10., t.accent)).child(i18n::t!("app.fact.this_computer")))).when(d.saved, |r| r.child(icon(IconName::Star, 11., t.tag))))
-                    .child(div().w(px(110.)).flex_none().truncate().text_size(px(11.5)).child(kind_label(d.kind)))
-                    .child(div().w(px(130.)).flex_none().truncate().font_family(MONO).text_size(px(11.5)).child(d.primary_ip().map(|i| i.to_string()).unwrap_or_default()))
+                    .child(div().w(px(110.)).flex_none().truncate().text_size(px(12.)).child(kind_label(d.kind)))
+                    .child(div().w(px(130.)).flex_none().truncate().font_family(MONO).text_size(px(12.)).child(d.primary_ip().map(|i| i.to_string()).unwrap_or_default()))
                     .child(div().w(px(140.)).flex_none().truncate().font_family(MONO).text_size(px(11.)).text_color(t.ink_muted).child(d.macs().next().unwrap_or_default().to_string()))
-                    .child(div().w(px(150.)).flex_none().truncate().text_size(px(11.5)).text_color(t.ink_muted).child(d.vendor.as_deref().map(nodo_core::mac::short_vendor).unwrap_or_default()))
+                    .child(div().w(px(150.)).flex_none().truncate().text_size(px(12.)).text_color(t.ink_muted).child(d.vendor.as_deref().map(nodo_core::mac::short_vendor).unwrap_or_default()))
                     .child(div().w(px(150.)).flex_none().flex().gap(px(3.)).overflow_hidden().children(layers.into_iter().map(|l| ui::chip(layer_label(l), t.layer(l), 10.5))))
-                    .child(div().w(px(110.)).flex_none().text_size(px(11.5)).text_color(t.ink_muted).child(if d.last_seen > 0 { crate::util::ago(d.last_seen, now) } else { String::new() }))
+                    .child(div().w(px(110.)).flex_none().text_size(px(12.)).text_color(t.ink_muted).child(if d.last_seen > 0 { crate::util::ago(d.last_seen, now) } else { String::new() }))
                     .on_click(cx.listener(move |this, ev: &ClickEvent, _, cx| {
                         this.select_device(id, cx);
                         if ev.click_count() == 2 {

@@ -1,5 +1,5 @@
 //! `nodo mcp`: a stdio MCP server (JSON-RPC 2.0, one message per line) over one map, proxied
-//! by Otherwise Apps' `otherwise-hub` as `nodo.*` and started by the app's AI panel for one
+//! by Otherwise Hub's `otherwise-hub` as `nodo.*` and started by the app's AI panel for one
 //! session. Read-only unless started with `--allow-writes` (the hub passes it only when the user
 //! enabled write tools) or `--propose <folder>` (the panel: write tools only check the change
 //! and leave it there for the app to show as a card); writes only edit a device's labels or add

@@ -412,7 +412,7 @@ mod tests {
         assert_eq!(assess(read_lock(&map).as_ref(), "laptop", 0), LockState::Free);
         let mut mine = MapLock::take(&map, "laptop", 1000).unwrap();
         assert_eq!(mine.path(), dir.path().join("Home network.nodo.lock.json"));
-        // the shared format: Otherwise Apps sees it as "open in Nodo"
+        // the shared format: Otherwise Hub sees it as "open in Nodo"
         assert_eq!(otherwise_link::lock::read(&map).unwrap().app, "nodo");
         assert!(matches!(assess(read_lock(&map).as_ref(), "laptop", 1010), LockState::Ours(_)));
         assert!(matches!(assess(read_lock(&map).as_ref(), "studio", 1010), LockState::Elsewhere(l) if l.host == "laptop"));
