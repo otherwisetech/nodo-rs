@@ -108,6 +108,12 @@ crates/app    `nodo-app` (GPUI + gpui-component). app.rs: window, files, top bar
 - GPUI pins: `Cargo.lock` pins zed `eb5483528be607b497afdaad0a237bebeb191249` and gpui-component
   `972a3ebfd01afca7da6d8b6f31c9a51288ea5565`, as in rama-rs. Never `cargo update` them.
 
+## Release
+
+Releases stay in this repo (`gh release create vX.Y.Z` with each file and its `.sha256`).
+Notes, file names and issue forms follow the family's release rules: otherwisetech/otherwise-apps
+`docs/releases.md` (how the Hub discovers and verifies releases).
+
 ## Validate
 
 ```
